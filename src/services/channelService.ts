@@ -1,5 +1,5 @@
 import { Channel } from '../types/channel.types';
-import { fetchIPTVChannels, getIPTVChannelsByCountry } from './iptvService';
+import { fetchIPTVChannels, getIPTVChannelsByCountry, getAvailableCountries } from './iptvService';
 
 let cachedChannels: Channel[] = [];
 let countries: string[] = [];
@@ -12,8 +12,7 @@ export const initializeChannels = async (): Promise<void> => {
     cachedChannels = await fetchIPTVChannels();
     
     // Update countries list
-    const countrySet = new Set(cachedChannels.map(ch => ch.country));
-    countries = ['All', ...Array.from(countrySet)].sort();
+    countries = getAvailableCountries(cachedChannels);
     
     // Update categories list
     const categorySet = new Set(cachedChannels.map(ch => ch.category));
@@ -101,11 +100,6 @@ export const getCountryCount = (): number => {
   return countries.length - 1; // Exclude 'All'
 };
 
-// Get category count
-export const getCategoryCount = (): number => {
-  return categories.length - 1; // Exclude 'All'
-};
-
 // Check if channels are loaded
 export const isChannelsLoaded = (): boolean => {
   return cachedChannels.length > 0;
@@ -145,83 +139,4 @@ export const getPaginatedChannels = (
     channels: filtered.slice(start, end),
     total: total
   };
-};
-
-// Get sample channels (for testing or when IPTV fails)
-export const getSampleChannels = (): Channel[] => {
-  return [
-    {
-      id: 'sample-1',
-      name: 'NASA TV',
-      country: 'USA',
-      category: 'Education',
-      logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e5/NASA_logo.svg/1200px-NASA_logo.svg.png',
-      streamUrl: 'https://nasa-i.akamaihd.net/hls/live/253871/NASA-TV/public_1200.m3u8',
-      language: 'English',
-    },
-    {
-      id: 'sample-2',
-      name: 'CNN International',
-      country: 'USA',
-      category: 'News',
-      logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b1/CNN_International_logo.svg/1200px-CNN_International_logo.svg.png',
-      streamUrl: 'https://www.cnn.com/stream',
-      language: 'English',
-    },
-    {
-      id: 'sample-3',
-      name: 'BBC World News',
-      country: 'UK',
-      category: 'News',
-      logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/63/BBC_World_News_2022.svg/1200px-BBC_World_News_2022.svg.png',
-      streamUrl: 'https://www.bbc.com/news/live',
-      language: 'English',
-    },
-    {
-      id: 'sample-4',
-      name: 'France 24',
-      country: 'France',
-      category: 'News',
-      logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/03/France_24_Logo.svg/1200px-France_24_Logo.svg.png',
-      streamUrl: 'https://www.france24.com/en/live',
-      language: 'French',
-    },
-    {
-      id: 'sample-5',
-      name: 'DW News',
-      country: 'Germany',
-      category: 'News',
-      logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3d/Deutsche_Welle_logo.svg/1200px-Deutsche_Welle_logo.svg.png',
-      streamUrl: 'https://www.dw.com/en/live-tv',
-      language: 'German',
-    },
-  ];
-};
-
-// Get channels by country (with caching)
-export const getChannelsByCountryCached = (country: string): Channel[] => {
-  const cacheKey = `channels_${country}`;
-  const cached = sessionStorage.getItem(cacheKey);
-  
-  if (cached) {
-    try {
-      return JSON.parse(cached);
-    } catch (e) {
-      // If cached data is corrupted, return fresh data
-    }
-  }
-  
-  const result = getChannelsByCountry(country);
-  sessionStorage.setItem(cacheKey, JSON.stringify(result));
-  return result;
-};
-
-// Clear cache for a specific country
-export const clearCountryCache = (country: string): void => {
-  sessionStorage.removeItem(`channels_${country}`);
-};
-
-// Clear all caches
-export const clearAllCache = (): void => {
-  sessionStorage.clear();
 };

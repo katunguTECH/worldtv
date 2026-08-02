@@ -4,7 +4,7 @@ import { Channel } from '../types/channel.types';
 const CACHE_KEY = 'iptv_channels';
 const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
 
-// YouTube live streams to add
+// YouTube live streams as fallback
 const youtubeChannels: Channel[] = [
   {
     id: 'yt-1',
@@ -51,55 +51,44 @@ const youtubeChannels: Channel[] = [
     streamUrl: 'https://www.youtube.com/watch?v=s7Rl2hPx9CY',
     language: 'German',
   },
-  {
-    id: 'yt-6',
-    name: 'France 24',
-    country: 'France',
-    category: 'News',
-    logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/03/France_24_Logo.svg/1200px-France_24_Logo.svg.png',
-    streamUrl: 'https://www.youtube.com/watch?v=dYPg3w3QwRk',
-    language: 'French',
-  },
-  {
-    id: 'yt-7',
-    name: 'Al Jazeera',
-    country: 'Qatar',
-    category: 'News',
-    logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/34/Al_Jazeera_2022.svg/1200px-Al_Jazeera_2022.svg.png',
-    streamUrl: 'https://www.youtube.com/watch?v=YgWcR0mZTx0',
-    language: 'English',
-  },
-  {
-    id: 'yt-8',
-    name: 'NHK World',
-    country: 'Japan',
-    category: 'News',
-    logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/NHK_World_logo.svg/1200px-NHK_World_logo.svg.png',
-    streamUrl: 'https://www.youtube.com/watch?v=Y7G1hByHdK0',
-    language: 'Japanese',
-  },
-  {
-    id: 'yt-9',
-    name: 'CGTN',
-    country: 'China',
-    category: 'News',
-    logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/db/CCTV-News_logo.svg/1200px-CCTV-News_logo.svg.png',
-    streamUrl: 'https://www.youtube.com/watch?v=5ifuJvWz8TI',
-    language: 'Chinese',
-  },
-  {
-    id: 'yt-10',
-    name: 'Euronews',
-    country: 'France',
-    category: 'News',
-    logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/01/Euronews_Logo.svg/1200px-Euronews_Logo.svg.png',
-    streamUrl: 'https://www.youtube.com/watch?v=Rg72LSuYzRg',
-    language: 'French',
-  },
+];
+
+// List of country codes and their names
+const COUNTRY_SOURCES = [
+  { code: 'us', name: 'USA' },
+  { code: 'gb', name: 'UK' },
+  { code: 'fr', name: 'France' },
+  { code: 'de', name: 'Germany' },
+  { code: 'jp', name: 'Japan' },
+  { code: 'in', name: 'India' },
+  { code: 'br', name: 'Brazil' },
+  { code: 'es', name: 'Spain' },
+  { code: 'it', name: 'Italy' },
+  { code: 'ru', name: 'Russia' },
+  { code: 'ca', name: 'Canada' },
+  { code: 'au', name: 'Australia' },
+  { code: 'mx', name: 'Mexico' },
+  { code: 'kr', name: 'South Korea' },
+  { code: 'nl', name: 'Netherlands' },
+  { code: 'se', name: 'Sweden' },
+  { code: 'no', name: 'Norway' },
+  { code: 'dk', name: 'Denmark' },
+  { code: 'fi', name: 'Finland' },
+  { code: 'pl', name: 'Poland' },
+  { code: 'tr', name: 'Turkey' },
+  { code: 'eg', name: 'Egypt' },
+  { code: 'za', name: 'South Africa' },
+  { code: 'ng', name: 'Nigeria' },
+  { code: 'pk', name: 'Pakistan' },
+  { code: 'bd', name: 'Bangladesh' },
+  { code: 'vn', name: 'Vietnam' },
+  { code: 'th', name: 'Thailand' },
+  { code: 'my', name: 'Malaysia' },
+  { code: 'ph', name: 'Philippines' },
 ];
 
 // Parse M3U content from IPTV-org
-const parseM3UContent = (content: string): Channel[] => {
+const parseM3UContent = (content: string, countryName: string): Channel[] => {
   const lines = content.split('\n');
   const channels: Channel[] = [];
   let currentChannel: Partial<Channel> = {};
@@ -119,7 +108,7 @@ const parseM3UContent = (content: string): Channel[] => {
         id: idMatch ? idMatch[1] : `iptv-${channels.length}`,
         name: nameMatch ? nameMatch[1].trim() : 'Unknown Channel',
         logo: logoMatch ? logoMatch[1] : 'https://via.placeholder.com/80x80?text=TV',
-        country: groupMatch ? groupMatch[1] : 'Various',
+        country: countryName,
         category: groupMatch ? groupMatch[1] : 'General',
         language: 'Unknown',
         streamUrl: '',
@@ -136,7 +125,7 @@ const parseM3UContent = (content: string): Channel[] => {
   return channels;
 };
 
-// Fetch channels from IPTV-org
+// Fetch channels from all country playlists
 export const fetchIPTVChannels = async (): Promise<Channel[]> => {
   try {
     // Check cache first
@@ -149,25 +138,37 @@ export const fetchIPTVChannels = async (): Promise<Channel[]> => {
       }
     }
 
-    console.log('Fetching fresh IPTV channels...');
-    const response = await fetch(
-      'https://raw.githubusercontent.com/iptv-org/iptv/master/playlists/iptv.m3u',
-      {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        },
-      }
-    );
+    console.log('Fetching fresh IPTV channels from country playlists...');
+    let allChannels: Channel[] = [];
+    
+    // Fetch from each country source
+    for (const source of COUNTRY_SOURCES) {
+      try {
+        const url = `https://raw.githubusercontent.com/iptv-org/iptv/master/playlists/${source.code}.m3u`;
+        console.log(`Fetching from: ${source.code} (${source.name})`);
+        
+        const response = await fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          },
+        });
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+        if (response.ok) {
+          const content = await response.text();
+          const channels = parseM3UContent(content, source.name);
+          allChannels = [...allChannels, ...channels];
+          console.log(`Added ${channels.length} channels from ${source.name}`);
+        } else {
+          console.warn(`Failed to fetch from ${source.code}: ${response.status}`);
+        }
+      } catch (error) {
+        console.warn(`Error fetching from ${source.code}:`, error);
+      }
     }
 
-    const content = await response.text();
-    const channels = parseM3UContent(content);
-
     // Add YouTube channels
-    const allChannels = [...channels, ...youtubeChannels];
+    allChannels = [...allChannels, ...youtubeChannels];
+    console.log('Total channels loaded:', allChannels.length);
 
     // Cache the results
     localStorage.setItem(
@@ -178,7 +179,6 @@ export const fetchIPTVChannels = async (): Promise<Channel[]> => {
       })
     );
 
-    console.log('Loaded channels:', allChannels.length);
     return allChannels;
   } catch (error) {
     console.error('Error fetching IPTV channels:', error);
@@ -189,17 +189,6 @@ export const fetchIPTVChannels = async (): Promise<Channel[]> => {
   }
 };
 
-// Get channels with pagination support
-export const getPaginatedChannels = (
-  channels: Channel[],
-  page: number = 1,
-  pageSize: number = 50
-): Channel[] => {
-  const start = (page - 1) * pageSize;
-  const end = start + pageSize;
-  return channels.slice(start, end);
-};
-
 // Get channels by country from IPTV list
 export const getIPTVChannelsByCountry = (
   channels: Channel[],
@@ -207,7 +196,12 @@ export const getIPTVChannelsByCountry = (
 ): Channel[] => {
   if (country === 'All') return channels;
   return channels.filter(ch => 
-    ch.country.toLowerCase() === country.toLowerCase() ||
-    ch.country.includes(country)
+    ch.country.toLowerCase() === country.toLowerCase()
   );
+};
+
+// Get available countries from loaded channels
+export const getAvailableCountries = (channels: Channel[]): string[] => {
+  const countrySet = new Set(channels.map(ch => ch.country));
+  return ['All', ...Array.from(countrySet)].sort();
 };
