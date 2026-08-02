@@ -1,6 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Channel } from './types/channel.types';
-import { getCountries, getCategories, getChannelsByCountry, searchChannels, getChannelsByCategory } from './services/channelService';
+import { 
+  initializeChannels, 
+  getCountries, 
+  getCategories, 
+  getChannelsByCountry, 
+  searchChannels
+} from './services/channelService';
 import SearchBar from './components/SearchBar';
 import Sidebar from './components/Sidebar';
 import ChannelGrid from './components/ChannelGrid';
@@ -8,28 +14,52 @@ import VideoPlayer from './components/VideoPlayer';
 import { useFavorites } from './hooks/useFavorites';
 
 function App() {
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCountry, setSelectedCountry] = useState('All');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
+  const [currentChannels, setCurrentChannels] = useState<Channel[]>([]);
   
   const countries = getCountries();
   const categories = getCategories();
   const { favorites, toggleFavorite, isFavorite } = useFavorites();
 
-  // Get current channels based on filters
-  const getCurrentChannels = () => {
-    if (searchQuery) {
-      return searchChannels(searchQuery);
-    }
-    let channels = getChannelsByCountry(selectedCountry);
-    if (selectedCategory !== 'All') {
-      channels = channels.filter(ch => ch.category === selectedCategory);
-    }
-    return channels;
-  };
+  // Initialize channels on mount
+  useEffect(() => {
+    const loadChannels = async () => {
+      setLoading(true);
+      try {
+        console.log('🚀 App: Loading channels...');
+        await initializeChannels();
+        console.log('📊 App: Channels initialized, loading from service...');
+        const channels = getChannelsByCountry('All');
+        console.log(`📺 App: Loaded ${channels.length} channels`);
+        setCurrentChannels(channels);
+      } catch (error) {
+        console.error('❌ App: Error loading channels:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadChannels();
+  }, []);
 
-  const currentChannels = getCurrentChannels();
+  // Update channels when filters change
+  useEffect(() => {
+    if (loading) return;
+    
+    let channels = [];
+    if (searchQuery) {
+      channels = searchChannels(searchQuery);
+    } else {
+      channels = getChannelsByCountry(selectedCountry);
+      if (selectedCategory !== 'All') {
+        channels = channels.filter(ch => ch.category === selectedCategory);
+      }
+    }
+    setCurrentChannels(channels);
+  }, [searchQuery, selectedCountry, selectedCategory, loading]);
 
   const handleCountrySelect = (country: string) => {
     setSelectedCountry(country);
@@ -55,9 +85,20 @@ function App() {
     setSelectedChannel(null);
   };
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-gray-900">
+        <div className="text-center">
+          <div className="text-white text-4xl mb-4">🌍</div>
+          <div className="text-white text-xl animate-pulse">Loading channels...</div>
+          <div className="text-gray-400 text-sm mt-2">This may take a moment</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen bg-gray-900">
-      {/* Sidebar */}
       <Sidebar
         selectedCountry={selectedCountry}
         onCountrySelect={handleCountrySelect}
@@ -67,9 +108,7 @@ function App() {
         categories={categories}
       />
 
-      {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
         <header className="p-4 border-b border-gray-700 bg-gray-800">
           <div className="flex items-center justify-between mb-3">
             <h1 className="text-white text-2xl font-bold">🌍 WorldTV</h1>
@@ -88,21 +127,17 @@ function App() {
           <SearchBar value={searchQuery} onChange={setSearchQuery} />
         </header>
 
-        {/* Channel Grid */}
         <main className="flex-1 overflow-y-auto p-4">
           <ChannelGrid
-            searchQuery={searchQuery}
-            selectedCountry={selectedCountry}
+            channels={currentChannels}
             onChannelSelect={handleChannelSelect}
             favorites={favorites}
             onToggleFavorite={toggleFavorite}
             isFavorite={isFavorite}
-            channels={currentChannels}
           />
         </main>
       </div>
 
-      {/* Channel Modal with Video Player */}
       {selectedChannel && (
         <div
           className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4"
@@ -112,7 +147,6 @@ function App() {
             className="bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Modal Header */}
             <div className="flex justify-between items-start p-4 border-b border-gray-700">
               <div className="flex-1">
                 <h2 className="text-white text-xl font-bold">{selectedChannel.name}</h2>
@@ -140,7 +174,6 @@ function App() {
               </button>
             </div>
 
-            {/* Video Player */}
             <div className="p-4">
               <VideoPlayer 
                 streamUrl={selectedChannel.streamUrl} 
@@ -148,7 +181,6 @@ function App() {
               />
             </div>
 
-            {/* Channel Info Footer */}
             <div className="p-4 border-t border-gray-700 bg-gray-800/50">
               <div className="flex items-center justify-between text-sm">
                 <div className="text-gray-400 truncate">

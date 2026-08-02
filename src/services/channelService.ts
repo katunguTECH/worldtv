@@ -8,7 +8,7 @@ let categories: string[] = [];
 // Initialize channels - call this once when app starts
 export const initializeChannels = async (): Promise<void> => {
   try {
-    console.log('Initializing channels...');
+    console.log('🚀 Initializing channels...');
     cachedChannels = await fetchIPTVChannels();
     
     // Update countries list
@@ -18,9 +18,9 @@ export const initializeChannels = async (): Promise<void> => {
     const categorySet = new Set(cachedChannels.map(ch => ch.category));
     categories = ['All', ...Array.from(categorySet)].sort();
     
-    console.log(`Channels initialized: ${cachedChannels.length} channels, ${countries.length - 1} countries, ${categories.length - 1} categories`);
+    console.log(`✅ Channels initialized: ${cachedChannels.length} channels, ${countries.length - 1} countries, ${categories.length - 1} categories`);
   } catch (error) {
-    console.error('Error initializing channels:', error);
+    console.error('❌ Error initializing channels:', error);
     cachedChannels = [];
     countries = ['All'];
     categories = ['All'];
@@ -107,7 +107,7 @@ export const isChannelsLoaded = (): boolean => {
 
 // Refresh channels (force update)
 export const refreshChannels = async (): Promise<void> => {
-  console.log('Refreshing channels...');
+  console.log('🔄 Refreshing channels...');
   // Clear cache
   localStorage.removeItem('iptv_channels');
   // Re-initialize

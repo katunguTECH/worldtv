@@ -92,7 +92,6 @@ const parseM3UContent = (content: string, countryName: string): Channel[] => {
   const lines = content.split('\n');
   const channels: Channel[] = [];
   let currentChannel: Partial<Channel> = {};
-  let currentUrl = '';
 
   for (const line of lines) {
     const trimmedLine = line.trim();
@@ -127,25 +126,32 @@ const parseM3UContent = (content: string, countryName: string): Channel[] => {
 
 // Fetch channels from all country playlists
 export const fetchIPTVChannels = async (): Promise<Channel[]> => {
+  console.log('🔄 Fetching IPTV channels...');
+  
   try {
     // Check cache first
     const cached = localStorage.getItem(CACHE_KEY);
     if (cached) {
-      const { data, timestamp } = JSON.parse(cached);
-      if (Date.now() - timestamp < CACHE_DURATION) {
-        console.log('Using cached IPTV channels:', data.length);
-        return data;
+      try {
+        const { data, timestamp } = JSON.parse(cached);
+        if (data && data.length > 0 && Date.now() - timestamp < CACHE_DURATION) {
+          console.log('✅ Using cached IPTV channels:', data.length);
+          return data;
+        }
+      } catch (e) {
+        console.warn('Cache parse error:', e);
+        localStorage.removeItem(CACHE_KEY);
       }
     }
 
-    console.log('Fetching fresh IPTV channels from country playlists...');
+    console.log('📡 Fetching fresh IPTV channels from country playlists...');
     let allChannels: Channel[] = [];
     
     // Fetch from each country source
     for (const source of COUNTRY_SOURCES) {
       try {
         const url = `https://raw.githubusercontent.com/iptv-org/iptv/master/playlists/${source.code}.m3u`;
-        console.log(`Fetching from: ${source.code} (${source.name})`);
+        console.log(`📡 Fetching from: ${source.code} (${source.name})`);
         
         const response = await fetch(url, {
           headers: {
@@ -157,34 +163,36 @@ export const fetchIPTVChannels = async (): Promise<Channel[]> => {
           const content = await response.text();
           const channels = parseM3UContent(content, source.name);
           allChannels = [...allChannels, ...channels];
-          console.log(`Added ${channels.length} channels from ${source.name}`);
+          console.log(`✅ Added ${channels.length} channels from ${source.name}`);
         } else {
-          console.warn(`Failed to fetch from ${source.code}: ${response.status}`);
+          console.warn(`⚠️ Failed to fetch from ${source.code}: ${response.status}`);
         }
       } catch (error) {
-        console.warn(`Error fetching from ${source.code}:`, error);
+        console.warn(`⚠️ Error fetching from ${source.code}:`, error);
       }
     }
 
     // Add YouTube channels
     allChannels = [...allChannels, ...youtubeChannels];
-    console.log('Total channels loaded:', allChannels.length);
+    console.log(`📊 Total channels loaded: ${allChannels.length}`);
 
-    // Cache the results
-    localStorage.setItem(
-      CACHE_KEY,
-      JSON.stringify({
-        data: allChannels,
-        timestamp: Date.now(),
-      })
-    );
-
-    return allChannels;
+    // Only cache if we got channels
+    if (allChannels.length > 0) {
+      localStorage.setItem(
+        CACHE_KEY,
+        JSON.stringify({
+          data: allChannels,
+          timestamp: Date.now(),
+        })
+      );
+      return allChannels;
+    } else {
+      console.warn('⚠️ No channels loaded, using YouTube fallback');
+      return youtubeChannels;
+    }
   } catch (error) {
-    console.error('Error fetching IPTV channels:', error);
-    
-    // Return YouTube channels as fallback
-    console.log('Using YouTube channels as fallback');
+    console.error('❌ Error fetching IPTV channels:', error);
+    console.log('🎬 Using YouTube channels as fallback');
     return youtubeChannels;
   }
 };
@@ -202,6 +210,9 @@ export const getIPTVChannelsByCountry = (
 
 // Get available countries from loaded channels
 export const getAvailableCountries = (channels: Channel[]): string[] => {
+  if (!channels || channels.length === 0) {
+    return ['All'];
+  }
   const countrySet = new Set(channels.map(ch => ch.country));
   return ['All', ...Array.from(countrySet)].sort();
 };

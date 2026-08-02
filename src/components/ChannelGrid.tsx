@@ -3,13 +3,11 @@ import { Channel } from '../types/channel.types';
 import ChannelCard from './ChannelCard';
 
 interface ChannelGridProps {
-  searchQuery: string;
-  selectedCountry: string;
+  channels: Channel[];
   onChannelSelect: (channel: Channel) => void;
   favorites: string[];
   onToggleFavorite: (id: string) => void;
   isFavorite: (id: string) => boolean;
-  channels: Channel[];
 }
 
 const ChannelGrid: React.FC<ChannelGridProps> = ({ 
