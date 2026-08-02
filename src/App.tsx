@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Channel } from './types/channel.types';
-import { getCountries, getChannelsByCountry, searchChannels } from './services/channelService';
+import { getCountries, getCategories, getChannelsByCountry, searchChannels, getChannelsByCategory } from './services/channelService';
 import SearchBar from './components/SearchBar';
 import Sidebar from './components/Sidebar';
 import ChannelGrid from './components/ChannelGrid';
@@ -10,9 +10,11 @@ import { useFavorites } from './hooks/useFavorites';
 function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCountry, setSelectedCountry] = useState('All');
+  const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
   
   const countries = getCountries();
+  const categories = getCategories();
   const { favorites, toggleFavorite, isFavorite } = useFavorites();
 
   // Get current channels based on filters
@@ -20,13 +22,22 @@ function App() {
     if (searchQuery) {
       return searchChannels(searchQuery);
     }
-    return getChannelsByCountry(selectedCountry);
+    let channels = getChannelsByCountry(selectedCountry);
+    if (selectedCategory !== 'All') {
+      channels = channels.filter(ch => ch.category === selectedCategory);
+    }
+    return channels;
   };
 
   const currentChannels = getCurrentChannels();
 
   const handleCountrySelect = (country: string) => {
     setSelectedCountry(country);
+    setSearchQuery('');
+  };
+
+  const handleCategorySelect = (category: string) => {
+    setSelectedCategory(category);
     setSearchQuery('');
   };
 
@@ -51,6 +62,9 @@ function App() {
         selectedCountry={selectedCountry}
         onCountrySelect={handleCountrySelect}
         countries={countries}
+        selectedCategory={selectedCategory}
+        onCategorySelect={handleCategorySelect}
+        categories={categories}
       />
 
       {/* Main Content */}
@@ -83,6 +97,7 @@ function App() {
             favorites={favorites}
             onToggleFavorite={toggleFavorite}
             isFavorite={isFavorite}
+            channels={currentChannels}
           />
         </main>
       </div>
@@ -101,7 +116,7 @@ function App() {
             <div className="flex justify-between items-start p-4 border-b border-gray-700">
               <div className="flex-1">
                 <h2 className="text-white text-xl font-bold">{selectedChannel.name}</h2>
-                <div className="flex items-center gap-3 mt-1">
+                <div className="flex items-center gap-3 mt-1 flex-wrap">
                   <span className="text-gray-400 text-sm">{selectedChannel.country}</span>
                   <span className="text-blue-400 text-sm bg-blue-900/30 px-2 py-0.5 rounded">
                     {selectedChannel.category}
@@ -136,7 +151,7 @@ function App() {
             {/* Channel Info Footer */}
             <div className="p-4 border-t border-gray-700 bg-gray-800/50">
               <div className="flex items-center justify-between text-sm">
-                <div className="text-gray-400">
+                <div className="text-gray-400 truncate">
                   <span className="font-medium">Stream URL:</span>{' '}
                   <span className="text-gray-500 truncate inline-block max-w-xs">
                     {selectedChannel.streamUrl}
@@ -144,9 +159,9 @@ function App() {
                 </div>
                 <button
                   onClick={() => window.open(selectedChannel.streamUrl, '_blank')}
-                  className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded transition text-xs"
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition flex items-center gap-2"
                 >
-                  Open in new tab
+                  ↗ Open in new tab
                 </button>
               </div>
             </div>

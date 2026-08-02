@@ -13,14 +13,16 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ streamUrl, channelName }) => 
   const [isWebsite, setIsWebsite] = useState(false);
   const [iframeUrl, setIframeUrl] = useState('');
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [iframeFailed, setIframeFailed] = useState(false);
 
   useEffect(() => {
-    // Reset states when streamUrl changes
+    // Reset states
     setIsWebsite(false);
     setIframeUrl('');
     setLoadError(null);
+    setIframeFailed(false);
 
-    // Check if it's a website URL (not a video stream)
+    // Check if it's a website URL
     const url = streamUrl.toLowerCase();
     const isWebsiteUrl = url.includes('.com') || url.includes('.org') || url.includes('.tv') || 
                          url.includes('/live') || url.includes('/watch') || url.includes('youtube') ||
@@ -28,7 +30,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ streamUrl, channelName }) => 
     
     if (isWebsiteUrl) {
       setIsWebsite(true);
-      // Try to get embed URL or use the URL directly
       let embedUrl = streamUrl;
       
       // Handle YouTube
@@ -37,8 +38,12 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ streamUrl, channelName }) => 
         if (url.includes('youtu.be')) {
           videoId = url.split('youtu.be/')[1]?.split('?')[0] || '';
         } else {
-          const urlParams = new URL(streamUrl).searchParams;
-          videoId = urlParams.get('v') || '';
+          try {
+            const urlParams = new URL(streamUrl).searchParams;
+            videoId = urlParams.get('v') || '';
+          } catch (e) {
+            // If URL parsing fails
+          }
         }
         if (videoId) {
           embedUrl = `https://www.youtube.com/embed/${videoId}`;
@@ -49,16 +54,14 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ streamUrl, channelName }) => 
       return;
     }
 
-    // If we have a video element, try to play the stream
+    // For video streams
     if (!videoRef.current) return;
 
-    // Dispose any existing player
     if (playerRef.current) {
       playerRef.current.dispose();
       playerRef.current = null;
     }
 
-    // Initialize video player for actual video streams
     const player = videojs(videoRef.current, {
       controls: true,
       autoplay: true,
@@ -84,13 +87,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ streamUrl, channelName }) => 
           'liveDisplay',
           'seekToLive',
           'remainingTimeDisplay',
-          'customControlSpacer',
           'playbackRateMenuButton',
-          'chaptersButton',
-          'descriptionsButton',
-          'subtitlesButton',
-          'captionsButton',
-          'audioTrackButton',
           'fullscreenToggle',
         ],
       },
@@ -98,63 +95,36 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ streamUrl, channelName }) => 
 
     playerRef.current = player;
 
-    // Set up error handling
     player.on('error', (e: any) => {
       console.error('Video player error:', e);
       setLoadError('Failed to load stream. Try opening in new tab.');
     });
 
-    // Load the stream
     try {
-      // Try different formats
-      const streamTypes = [
-        { type: 'application/x-mpegURL' },
-        { type: 'application/vnd.apple.mpegurl' },
-        { type: 'video/mp4' },
-        { type: 'video/webm' },
-        { type: 'video/ogg' },
-      ];
-
-      // If URL ends with .m3u8, use HLS
       if (streamUrl.endsWith('.m3u8')) {
         player.src({
           src: streamUrl,
           type: 'application/x-mpegURL',
         });
       } else {
-        // Try the URL as-is with various formats
-        let loaded = false;
-        for (const format of streamTypes) {
-          try {
-            player.src({
-              src: streamUrl,
-              type: format.type,
-            });
-            loaded = true;
-            break;
-          } catch (e) {
-            continue;
-          }
-        }
-        if (!loaded) {
-          throw new Error('Could not load stream with any format');
-        }
+        player.src({
+          src: streamUrl,
+          type: 'video/mp4',
+        });
       }
 
-      // Handle successful load
       player.ready(() => {
         try {
           player.play();
         } catch (e) {
-          console.warn('Autoplay was prevented:', e);
+          console.warn('Autoplay prevented:', e);
         }
       });
     } catch (error) {
       console.error('Error loading stream:', error);
-      setLoadError('Unable to load this stream. Try opening in new tab.');
+      setLoadError('Unable to load this stream.');
     }
 
-    // Cleanup on unmount or streamUrl change
     return () => {
       if (playerRef.current) {
         playerRef.current.dispose();
@@ -163,11 +133,34 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ streamUrl, channelName }) => 
     };
   }, [streamUrl]);
 
-  // Create poster image with channel name
   const posterImage = `data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='100%25' height='100%25'><rect width='100%25' height='100%25' fill='%231a1a1a'/><text x='50%25' y='50%25' font-family='Arial' font-size='20' fill='%23666' text-anchor='middle' dy='.3em'>${channelName}</text></svg>`;
 
-  // If it's a website, embed it in an iframe
+  // Handle iframe load error
+  const handleIframeError = () => {
+    setIframeFailed(true);
+  };
+
+  // Website with iframe
   if (isWebsite) {
+    if (iframeFailed) {
+      return (
+        <div className="bg-gray-900 rounded-lg p-8 text-center">
+          <div className="text-yellow-400 text-4xl mb-4">🔒</div>
+          <div className="text-white text-lg mb-2">This website blocks embedded viewing</div>
+          <div className="text-gray-400 text-sm mb-4">
+            {channelName} prevents their stream from being shown in an iframe.
+            <br />Click the button below to open it directly.
+          </div>
+          <button
+            onClick={() => window.open(streamUrl, '_blank')}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition text-lg font-semibold"
+          >
+            Open {channelName} in New Tab ↗
+          </button>
+        </div>
+      );
+    }
+
     return (
       <div className="relative bg-black rounded-lg overflow-hidden" style={{ paddingBottom: '56.25%', height: 0 }}>
         <iframe
@@ -179,12 +172,23 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ streamUrl, channelName }) => 
           sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
           style={{ border: 'none' }}
           loading="lazy"
+          onError={handleIframeError}
+          onLoad={() => console.log('Iframe loaded successfully')}
         />
+        {/* Fallback overlay if iframe fails silently */}
+        <div className="absolute bottom-4 right-4 z-10">
+          <button
+            onClick={() => window.open(streamUrl, '_blank')}
+            className="bg-gray-800/90 hover:bg-gray-700 text-white px-3 py-1.5 rounded text-sm transition flex items-center gap-1"
+          >
+            Open in new tab ↗
+          </button>
+        </div>
       </div>
     );
   }
 
-  // If there's an error, show error message
+  // Error state for video streams
   if (loadError) {
     return (
       <div className="bg-gray-900 rounded-lg p-8 text-center">
@@ -193,15 +197,15 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ streamUrl, channelName }) => 
         <div className="text-gray-400 text-sm mb-4">Stream URL: {streamUrl}</div>
         <button
           onClick={() => window.open(streamUrl, '_blank')}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition"
+          className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition text-lg font-semibold"
         >
-          Open in New Tab
+          Open in New Tab ↗
         </button>
       </div>
     );
   }
 
-  // For actual video streams
+  // Video player for actual streams
   return (
     <div data-vjs-player className="bg-black rounded-lg overflow-hidden">
       <video 
