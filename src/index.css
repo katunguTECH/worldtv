@@ -1,3 +1,71 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #111827;
+  color: white;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #1f2937;
+}
+::-webkit-scrollbar-thumb {
+  background: #4b5563;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;
+}
+
+/* Animation for channel cards */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.channel-card {
+  animation: fadeIn 0.3s ease-in;
+}
+
+/* Video player customization */
+.video-js {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.vjs-theme-city {
+  --vjs-theme-city-primary: #3b82f6;
+  --vjs-theme-city-secondary: #1e293b;
+}
+
+.vjs-theme-city .vjs-big-play-button {
+  border-radius: 50% !important;
+  background: rgba(59, 130, 246, 0.8) !important;
+  border-color: #3b82f6 !important;
+}
+
+.vjs-theme-city .vjs-big-play-button:hover {
+  background: #3b82f6 !important;
+}

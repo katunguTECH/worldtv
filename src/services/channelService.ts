@@ -97,7 +97,7 @@ export const getChannelCount = (): number => {
 
 // Get country count
 export const getCountryCount = (): number => {
-  return countries.length - 1; // Exclude 'All'
+  return countries.length - 1;
 };
 
 // Check if channels are loaded
@@ -108,9 +108,7 @@ export const isChannelsLoaded = (): boolean => {
 // Refresh channels (force update)
 export const refreshChannels = async (): Promise<void> => {
   console.log('🔄 Refreshing channels...');
-  // Clear cache
   localStorage.removeItem('iptv_channels');
-  // Re-initialize
   await initializeChannels();
 };
 

@@ -289,7 +289,7 @@ const iptvChannels: Channel[] = [
     country: 'UK',
     category: 'News',
     logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/9b/Sky_News_logo_2024.svg/1200px-Sky_News_logo_2024.svg.png',
-    streamUrl: 'https://skylive.net/stream.m3u8',
+    streamUrl: 'https://www.youtube.com/watch?v=YjJ3tFDhKl8', // Fixed: using YouTube URL
     language: 'English',
   },
   // France
@@ -299,7 +299,7 @@ const iptvChannels: Channel[] = [
     country: 'France',
     category: 'News',
     logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/03/France_24_Logo.svg/1200px-France_24_Logo.svg.png',
-    streamUrl: 'https://france24.com/live',
+    streamUrl: 'https://www.youtube.com/watch?v=dYPg3w3QwRk',
     language: 'French',
   },
   // Germany
@@ -309,7 +309,7 @@ const iptvChannels: Channel[] = [
     country: 'Germany',
     category: 'News',
     logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3d/Deutsche_Welle_logo.svg/1200px-Deutsche_Welle_logo.svg.png',
-    streamUrl: 'https://dw.com/live',
+    streamUrl: 'https://www.youtube.com/watch?v=s7Rl2hPx9CY',
     language: 'German',
   },
   // Japan
@@ -319,7 +319,7 @@ const iptvChannels: Channel[] = [
     country: 'Japan',
     category: 'News',
     logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/NHK_World_logo.svg/1200px-NHK_World_logo.svg.png',
-    streamUrl: 'https://nhk.or.jp/live',
+    streamUrl: 'https://www.youtube.com/watch?v=Y7G1hByHdK0',
     language: 'Japanese',
   },
   // Qatar
@@ -329,7 +329,7 @@ const iptvChannels: Channel[] = [
     country: 'Qatar',
     category: 'News',
     logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/34/Al_Jazeera_2022.svg/1200px-Al_Jazeera_2022.svg.png',
-    streamUrl: 'https://aljazeera.com/live',
+    streamUrl: 'https://www.youtube.com/watch?v=YgWcR0mZTx0',
     language: 'English',
   },
 ];

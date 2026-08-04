@@ -16,41 +16,42 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ streamUrl, channelName }) => 
   const [iframeFailed, setIframeFailed] = useState(false);
 
   useEffect(() => {
-    // Reset states
     setIsWebsite(false);
     setIframeUrl('');
     setLoadError(null);
     setIframeFailed(false);
 
-    // Check if it's a website URL
     const url = streamUrl.toLowerCase();
+    
+    // Check for YouTube
+    if (url.includes('youtube.com/watch') || url.includes('youtu.be')) {
+      setIsWebsite(true);
+      let videoId = '';
+      if (url.includes('youtu.be')) {
+        videoId = url.split('youtu.be/')[1]?.split('?')[0] || '';
+      } else {
+        try {
+          const urlParams = new URL(streamUrl).searchParams;
+          videoId = urlParams.get('v') || '';
+        } catch (e) {
+          // If URL parsing fails
+        }
+      }
+      if (videoId) {
+        setIframeUrl(`https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0`);
+      } else {
+        setIframeUrl(streamUrl);
+      }
+      return;
+    }
+
+    // Check if it's a website URL
     const isWebsiteUrl = url.includes('.com') || url.includes('.org') || url.includes('.tv') || 
-                         url.includes('/live') || url.includes('/watch') || url.includes('youtube') ||
-                         url.includes('youtu.be');
+                         url.includes('/live') || url.includes('/watch');
     
     if (isWebsiteUrl) {
       setIsWebsite(true);
-      let embedUrl = streamUrl;
-      
-      // Handle YouTube
-      if (url.includes('youtube.com/watch') || url.includes('youtu.be')) {
-        let videoId = '';
-        if (url.includes('youtu.be')) {
-          videoId = url.split('youtu.be/')[1]?.split('?')[0] || '';
-        } else {
-          try {
-            const urlParams = new URL(streamUrl).searchParams;
-            videoId = urlParams.get('v') || '';
-          } catch (e) {
-            // If URL parsing fails
-          }
-        }
-        if (videoId) {
-          embedUrl = `https://www.youtube.com/embed/${videoId}`;
-        }
-      }
-      
-      setIframeUrl(embedUrl);
+      setIframeUrl(streamUrl);
       return;
     }
 
@@ -135,11 +136,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ streamUrl, channelName }) => 
 
   const posterImage = `data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='100%25' height='100%25'><rect width='100%25' height='100%25' fill='%231a1a1a'/><text x='50%25' y='50%25' font-family='Arial' font-size='20' fill='%23666' text-anchor='middle' dy='.3em'>${channelName}</text></svg>`;
 
-  // Handle iframe load error
-  const handleIframeError = () => {
-    setIframeFailed(true);
-  };
-
   // Website with iframe
   if (isWebsite) {
     if (iframeFailed) {
@@ -172,10 +168,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ streamUrl, channelName }) => 
           sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
           style={{ border: 'none' }}
           loading="lazy"
-          onError={handleIframeError}
+          onError={() => setIframeFailed(true)}
           onLoad={() => console.log('Iframe loaded successfully')}
         />
-        {/* Fallback overlay if iframe fails silently */}
         <div className="absolute bottom-4 right-4 z-10">
           <button
             onClick={() => window.open(streamUrl, '_blank')}
