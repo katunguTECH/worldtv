@@ -282,27 +282,9 @@ const iptvChannels: Channel[] = [
     streamUrl: 'https://cbsnewshd-lh.akamaihd.net/i/CBSNHD_7@199302/master.m3u8',
     language: 'English',
   },
-  {
-    id: 'iptv-4',
-    name: 'CNBC',
-    country: 'USA',
-    category: 'Business',
-    logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4f/CNBC_logo.svg/1200px-CNBC_logo.svg.png',
-    streamUrl: 'https://cnbc.com/stream',
-    language: 'English',
-  },
   // UK
   {
-    id: 'iptv-5',
-    name: 'BBC One',
-    country: 'UK',
-    category: 'Entertainment',
-    logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/63/BBC_World_News_2022.svg/1200px-BBC_World_News_2022.svg.png',
-    streamUrl: 'https://bbc.com/stream',
-    language: 'English',
-  },
-  {
-    id: 'iptv-6',
+    id: 'iptv-4',
     name: 'Sky News (Live)',
     country: 'UK',
     category: 'News',
@@ -312,7 +294,7 @@ const iptvChannels: Channel[] = [
   },
   // France
   {
-    id: 'iptv-7',
+    id: 'iptv-5',
     name: 'France 24 (Live)',
     country: 'France',
     category: 'News',
@@ -322,7 +304,7 @@ const iptvChannels: Channel[] = [
   },
   // Germany
   {
-    id: 'iptv-8',
+    id: 'iptv-6',
     name: 'DW TV',
     country: 'Germany',
     category: 'News',
@@ -332,7 +314,7 @@ const iptvChannels: Channel[] = [
   },
   // Japan
   {
-    id: 'iptv-9',
+    id: 'iptv-7',
     name: 'NHK World (Live)',
     country: 'Japan',
     category: 'News',
@@ -342,7 +324,7 @@ const iptvChannels: Channel[] = [
   },
   // Qatar
   {
-    id: 'iptv-10',
+    id: 'iptv-8',
     name: 'Al Jazeera (Live)',
     country: 'Qatar',
     category: 'News',
@@ -352,168 +334,63 @@ const iptvChannels: Channel[] = [
   },
 ];
 
-// ===== FETCH IPTV CHANNELS =====
-export const fetchIPTVChannels = async (): Promise<Channel[]> => {
-  console.log('🔄 Fetching IPTV channels...');
-  
-  try {
-    // Check cache first
-    const cached = localStorage.getItem(CACHE_KEY);
-    if (cached) {
-      try {
-        const { data, timestamp } = JSON.parse(cached);
-        if (data && data.length > 0 && Date.now() - timestamp < CACHE_DURATION) {
-          console.log(`✅ Using cached channels: ${data.length}`);
-          return data;
-        }
-      } catch (e) {
-        console.warn('Cache parse error:', e);
-        localStorage.removeItem(CACHE_KEY);
-      }
-    }
-
-    console.log('📡 Building channel list...');
-    let allChannels: Channel[] = [];
-
-    // Try to fetch from IPTV-org using a CORS proxy
-    try {
-      console.log('📡 Attempting to fetch IPTV playlists...');
-      const countriesToTry = ['us', 'gb', 'fr', 'de', 'jp', 'in', 'br', 'es', 'it', 'ru'];
-      
-      for (const code of countriesToTry) {
-        try {
-          // Use a CORS proxy or alternative URL
-          const urls = [
-            `https://raw.githubusercontent.com/iptv-org/iptv/master/playlists/${code}.m3u`,
-            `https://corsproxy.io/?${encodeURIComponent(`https://raw.githubusercontent.com/iptv-org/iptv/master/playlists/${code}.m3u`)}`,
-          ];
-          
-          let fetched = false;
-          for (const url of urls) {
-            try {
-              console.log(`📡 Fetching: ${code}...`);
-              const response = await fetch(url, {
-                headers: {
-                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                },
-              });
-              
-              if (response.ok) {
-                const content = await response.text();
-                if (content && content.length > 500) {
-                  // Find country name
-                  const country = COUNTRY_NAMES[code] || code.toUpperCase();
-                  const channels = parseM3UContent(content, country);
-                  allChannels = [...allChannels, ...channels];
-                  console.log(`✅ Added ${channels.length} channels from ${country}`);
-                  fetched = true;
-                  break;
-                }
-              }
-            } catch (e) {
-              console.warn(`⚠️ Failed URL for ${code}:`, e);
-            }
-          }
-          
-          if (!fetched) {
-            console.warn(`⚠️ Could not fetch ${code}`);
-          }
-        } catch (e) {
-          console.warn(`⚠️ Error with ${code}:`, e);
-        }
-      }
-    } catch (e) {
-      console.warn('⚠️ IPTV fetch failed:', e);
-    }
-
-    // If we got IPTV channels, add them
-    if (allChannels.length > 0) {
-      console.log(`✅ Got ${allChannels.length} IPTV channels`);
-    } else {
-      console.log('📡 No IPTV channels fetched, using hardcoded IPTV list');
-      allChannels = [...iptvChannels];
-    }
-
-    // Add YouTube channels
-    allChannels = [...allChannels, ...youtubeChannels];
-    console.log(`📊 Total channels loaded: ${allChannels.length}`);
-
-    // Cache the results
-    if (allChannels.length > 0) {
-      localStorage.setItem(
-        CACHE_KEY,
-        JSON.stringify({
-          data: allChannels,
-          timestamp: Date.now(),
-        })
-      );
-    }
-
-    return allChannels;
-  } catch (error) {
-    console.error('❌ Error fetching channels:', error);
-    // Return YouTube + hardcoded IPTV as fallback
-    return [...iptvChannels, ...youtubeChannels];
-  }
-};
-
-// ===== COUNTRY NAME MAPPING =====
-const COUNTRY_NAMES: { [key: string]: string } = {
-  us: 'USA',
-  gb: 'UK',
-  fr: 'France',
-  de: 'Germany',
-  jp: 'Japan',
-  in: 'India',
-  br: 'Brazil',
-  es: 'Spain',
-  it: 'Italy',
-  ru: 'Russia',
-  ca: 'Canada',
-  au: 'Australia',
-  mx: 'Mexico',
-  kr: 'South Korea',
-  nl: 'Netherlands',
-  se: 'Sweden',
-  no: 'Norway',
-  dk: 'Denmark',
-  fi: 'Finland',
-  pl: 'Poland',
-  tr: 'Turkey',
-  eg: 'Egypt',
-  za: 'South Africa',
-  ng: 'Nigeria',
-  pk: 'Pakistan',
-  bd: 'Bangladesh',
-  vn: 'Vietnam',
-  th: 'Thailand',
-  my: 'Malaysia',
-  ph: 'Philippines',
-  il: 'Israel',
-  ae: 'UAE',
-  sa: 'Saudi Arabia',
-  jo: 'Jordan',
-  ke: 'Kenya',
-  gh: 'Ghana',
-  ar: 'Argentina',
-  co: 'Colombia',
-  cl: 'Chile',
-  pe: 'Peru',
-  ve: 'Venezuela',
-  nz: 'New Zealand',
-  pt: 'Portugal',
-  gr: 'Greece',
-  cz: 'Czech Republic',
-  hu: 'Hungary',
-  at: 'Austria',
-  ch: 'Switzerland',
-  be: 'Belgium',
-  sg: 'Singapore',
-  hk: 'Hong Kong',
-  tw: 'Taiwan',
-  lk: 'Sri Lanka',
-  id: 'Indonesia',
-};
+// ===== COMPLETE COUNTRY SOURCES FOR IPTV FETCH =====
+const COUNTRY_SOURCES = [
+  // North America
+  { code: 'us', name: 'USA' },
+  { code: 'ca', name: 'Canada' },
+  { code: 'mx', name: 'Mexico' },
+  // Europe
+  { code: 'gb', name: 'UK' },
+  { code: 'fr', name: 'France' },
+  { code: 'de', name: 'Germany' },
+  { code: 'it', name: 'Italy' },
+  { code: 'es', name: 'Spain' },
+  { code: 'ru', name: 'Russia' },
+  { code: 'nl', name: 'Netherlands' },
+  { code: 'se', name: 'Sweden' },
+  { code: 'no', name: 'Norway' },
+  { code: 'dk', name: 'Denmark' },
+  { code: 'fi', name: 'Finland' },
+  { code: 'pl', name: 'Poland' },
+  { code: 'tr', name: 'Turkey' },
+  { code: 'pt', name: 'Portugal' },
+  { code: 'gr', name: 'Greece' },
+  // Asia
+  { code: 'jp', name: 'Japan' },
+  { code: 'in', name: 'India' },
+  { code: 'kr', name: 'South Korea' },
+  { code: 'cn', name: 'China' },
+  { code: 'tw', name: 'Taiwan' },
+  { code: 'hk', name: 'Hong Kong' },
+  { code: 'sg', name: 'Singapore' },
+  { code: 'my', name: 'Malaysia' },
+  { code: 'ph', name: 'Philippines' },
+  { code: 'vn', name: 'Vietnam' },
+  { code: 'th', name: 'Thailand' },
+  { code: 'id', name: 'Indonesia' },
+  { code: 'pk', name: 'Pakistan' },
+  { code: 'bd', name: 'Bangladesh' },
+  // Middle East
+  { code: 'il', name: 'Israel' },
+  { code: 'ae', name: 'UAE' },
+  { code: 'sa', name: 'Saudi Arabia' },
+  { code: 'eg', name: 'Egypt' },
+  // Africa
+  { code: 'za', name: 'South Africa' },
+  { code: 'ng', name: 'Nigeria' },
+  { code: 'ke', name: 'Kenya' },
+  { code: 'gh', name: 'Ghana' },
+  // South America
+  { code: 'br', name: 'Brazil' },
+  { code: 'ar', name: 'Argentina' },
+  { code: 'co', name: 'Colombia' },
+  { code: 'cl', name: 'Chile' },
+  { code: 'pe', name: 'Peru' },
+  // Oceania
+  { code: 'au', name: 'Australia' },
+  { code: 'nz', name: 'New Zealand' },
+];
 
 // ===== PARSE M3U CONTENT =====
 const parseM3UContent = (content: string, countryName: string): Channel[] => {
@@ -551,6 +428,107 @@ const parseM3UContent = (content: string, countryName: string): Channel[] => {
   return channels;
 };
 
+// ===== FETCH IPTV CHANNELS =====
+export const fetchIPTVChannels = async (): Promise<Channel[]> => {
+  console.log('🔄 Fetching IPTV channels...');
+  
+  try {
+    // Check cache first
+    const cached = localStorage.getItem(CACHE_KEY);
+    if (cached) {
+      try {
+        const { data, timestamp } = JSON.parse(cached);
+        if (data && data.length > 0 && Date.now() - timestamp < CACHE_DURATION) {
+          console.log(`✅ Using cached channels: ${data.length}`);
+          return data;
+        }
+      } catch (e) {
+        console.warn('Cache parse error:', e);
+        localStorage.removeItem(CACHE_KEY);
+      }
+    }
+
+    console.log('📡 Fetching fresh IPTV channels from country playlists...');
+    let allChannels: Channel[] = [];
+    let successfulFetches = 0;
+
+    // Try to fetch from IPTV-org for each country
+    for (const source of COUNTRY_SOURCES) {
+      try {
+        const urls = [
+          `https://raw.githubusercontent.com/iptv-org/iptv/master/playlists/${source.code}.m3u`,
+          `https://cdn.jsdelivr.net/gh/iptv-org/iptv@master/playlists/${source.code}.m3u`,
+        ];
+        
+        let fetched = false;
+        for (const url of urls) {
+          try {
+            console.log(`📡 Fetching from: ${source.code} (${source.name})`);
+            
+            const response = await fetch(url, {
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Accept': 'text/plain, application/x-mpegURL, */*',
+              },
+            });
+
+            if (response.ok) {
+              const content = await response.text();
+              if (content && content.length > 100) {
+                const channels = parseM3UContent(content, source.name);
+                if (channels.length > 0) {
+                  allChannels = [...allChannels, ...channels];
+                  successfulFetches++;
+                  console.log(`✅ Added ${channels.length} channels from ${source.name}`);
+                  fetched = true;
+                  break;
+                }
+              }
+            }
+          } catch (e) {
+            console.warn(`⚠️ Failed URL for ${source.code}:`, e);
+          }
+        }
+        
+        if (!fetched) {
+          console.warn(`⚠️ Could not fetch ${source.code} from any source`);
+        }
+      } catch (error) {
+        console.warn(`⚠️ Error fetching from ${source.code}:`, error);
+      }
+    }
+
+    // If we got IPTV channels, add them
+    if (allChannels.length > 0) {
+      console.log(`✅ Got ${allChannels.length} IPTV channels from ${successfulFetches} countries`);
+    } else {
+      console.log('📡 No IPTV channels fetched, using hardcoded IPTV list');
+      allChannels = [...iptvChannels];
+    }
+
+    // Add YouTube channels
+    allChannels = [...allChannels, ...youtubeChannels];
+    console.log(`📊 Total channels loaded: ${allChannels.length}`);
+
+    // Cache the results
+    if (allChannels.length > 0) {
+      localStorage.setItem(
+        CACHE_KEY,
+        JSON.stringify({
+          data: allChannels,
+          timestamp: Date.now(),
+        })
+      );
+    }
+
+    return allChannels;
+  } catch (error) {
+    console.error('❌ Error fetching IPTV channels:', error);
+    // Return YouTube + hardcoded IPTV as fallback
+    return [...iptvChannels, ...youtubeChannels];
+  }
+};
+
 // ===== HELPER FUNCTIONS =====
 export const getIPTVChannelsByCountry = (
   channels: Channel[],
@@ -577,4 +555,11 @@ export const getTotalChannels = (channels: Channel[]): number => {
 export const getChannelsByCategory = (channels: Channel[], category: string): Channel[] => {
   if (category === 'All') return channels;
   return channels.filter(ch => ch.category === category);
+};
+
+// Force refresh channels
+export const forceRefreshChannels = async (): Promise<Channel[]> => {
+  console.log('🔄 Force refreshing channels...');
+  localStorage.removeItem(CACHE_KEY);
+  return await fetchIPTVChannels();
 };
