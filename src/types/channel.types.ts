@@ -7,7 +7,7 @@ export interface Channel {
   streamUrl: string;
   language: string;
   isFavorite?: boolean;
-  group?: string; // For grouping channels
+  group?: string;
 }
 
 export interface ChannelsResponse {

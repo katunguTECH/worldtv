@@ -5,7 +5,8 @@ import {
   getCountries, 
   getCategories, 
   getChannelsByCountry, 
-  searchChannels
+  searchChannels,
+  refreshChannels
 } from './services/channelService';
 import SearchBar from './components/SearchBar';
 import Sidebar from './components/Sidebar';
@@ -85,6 +86,30 @@ function App() {
     setSelectedChannel(null);
   };
 
+  const handleRefreshChannels = async () => {
+    setLoading(true);
+    try {
+      console.log('🔄 Refreshing channels...');
+      await refreshChannels();
+      const channels = getChannelsByCountry('All');
+      console.log(`📺 App: Refreshed ${channels.length} channels`);
+      setCurrentChannels(channels);
+    } catch (error) {
+      console.error('❌ App: Error refreshing channels:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleClearCache = () => {
+    if (window.confirm('Clear all cached data and refresh?')) {
+      localStorage.removeItem('iptv_channels');
+      localStorage.removeItem('favorites');
+      alert('Cache cleared! Click Refresh to reload channels.');
+      window.location.reload();
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-900">
@@ -112,15 +137,27 @@ function App() {
         <header className="p-4 border-b border-gray-700 bg-gray-800">
           <div className="flex items-center justify-between mb-3">
             <h1 className="text-white text-2xl font-bold">🌍 WorldTV</h1>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               <span className="text-gray-400 text-sm">
                 {currentChannels.length} channels
               </span>
               <button
-                onClick={handleRandomChannel}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition flex items-center gap-2"
+                onClick={handleClearCache}
+                className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg transition flex items-center gap-1 text-sm"
               >
-                <span>🎲</span> Random
+                🗑️ Clear
+              </button>
+              <button
+                onClick={handleRefreshChannels}
+                className="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg transition flex items-center gap-1 text-sm"
+              >
+                🔄 Refresh
+              </button>
+              <button
+                onClick={handleRandomChannel}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg transition flex items-center gap-1 text-sm"
+              >
+                🎲 Random
               </button>
             </div>
           </div>
