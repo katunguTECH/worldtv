@@ -4,7 +4,7 @@ import { Channel } from '../types/channel.types';
 const CACHE_KEY = 'iptv_channels';
 const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
 
-// ===== COMPLETE YOUTUBE CHANNELS LIST (25+ channels) =====
+// ===== COMPLETE YOUTUBE CHANNELS LIST (40+ channels) =====
 const youtubeChannels: Channel[] = [
   // USA
   {
@@ -61,6 +61,24 @@ const youtubeChannels: Channel[] = [
     streamUrl: 'https://www.youtube.com/watch?v=51S4IH42lGw',
     language: 'English',
   },
+  {
+    id: 'yt-26',
+    name: 'Cheddar News',
+    country: 'USA',
+    category: 'Business',
+    logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/07/Cheddar_Logo.svg/1200px-Cheddar_Logo.svg.png',
+    streamUrl: 'https://www.youtube.com/watch?v=gCNeDWCI0vo',
+    language: 'English',
+  },
+  {
+    id: 'yt-27',
+    name: 'Bloomberg Television',
+    country: 'USA',
+    category: 'Business',
+    logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6e/Bloomberg_TV_logo.svg/1200px-Bloomberg_TV_logo.svg.png',
+    streamUrl: 'https://www.youtube.com/watch?v=dp8PhLsUcFE',
+    language: 'English',
+  },
   // UK
   {
     id: 'yt-7',
@@ -80,6 +98,15 @@ const youtubeChannels: Channel[] = [
     streamUrl: 'https://www.youtube.com/watch?v=5wHZz9gC_kM',
     language: 'English',
   },
+  {
+    id: 'yt-28',
+    name: 'GB News',
+    country: 'UK',
+    category: 'News',
+    logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/13/GB_News_logo.svg/1200px-GB_News_logo.svg.png',
+    streamUrl: 'https://www.youtube.com/watch?v=K3307iQceGk',
+    language: 'English',
+  },
   // Germany
   {
     id: 'yt-9',
@@ -89,6 +116,15 @@ const youtubeChannels: Channel[] = [
     logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3d/Deutsche_Welle_logo.svg/1200px-Deutsche_Welle_logo.svg.png',
     streamUrl: 'https://www.youtube.com/watch?v=s7Rl2hPx9CY',
     language: 'German',
+  },
+  {
+    id: 'yt-29',
+    name: 'DW News (English)',
+    country: 'Germany',
+    category: 'News',
+    logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3d/Deutsche_Welle_logo.svg/1200px-Deutsche_Welle_logo.svg.png',
+    streamUrl: 'https://www.youtube.com/watch?v=vV1p20Zq3xI',
+    language: 'English',
   },
   // France
   {
@@ -100,6 +136,24 @@ const youtubeChannels: Channel[] = [
     streamUrl: 'https://www.youtube.com/watch?v=dYPg3w3QwRk',
     language: 'French',
   },
+  {
+    id: 'yt-30',
+    name: 'Euronews English',
+    country: 'France',
+    category: 'News',
+    logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/74/Euronews_logo_2016.svg/1200px-Euronews_logo_2016.svg.png',
+    streamUrl: 'https://www.youtube.com/watch?v=pykdhnSQf_4',
+    language: 'English',
+  },
+  {
+    id: 'yt-31',
+    name: 'Africanews',
+    country: 'France',
+    category: 'News',
+    logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/91/Africanews_logo.svg/1200px-Africanews_logo.svg.png',
+    streamUrl: 'https://www.youtube.com/watch?v=xS5E-R1a1W8',
+    language: 'English',
+  },
   // Qatar
   {
     id: 'yt-11',
@@ -109,6 +163,15 @@ const youtubeChannels: Channel[] = [
     logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/34/Al_Jazeera_2022.svg/1200px-Al_Jazeera_2022.svg.png',
     streamUrl: 'https://www.youtube.com/watch?v=YgWcR0mZTx0',
     language: 'English',
+  },
+  {
+    id: 'yt-32',
+    name: 'Al Jazeera Arabic',
+    country: 'Qatar',
+    category: 'News',
+    logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/34/Al_Jazeera_2022.svg/1200px-Al_Jazeera_2022.svg.png',
+    streamUrl: 'https://www.youtube.com/watch?v=bNyUyrR0PHo',
+    language: 'Arabic',
   },
   // Japan
   {
@@ -180,6 +243,34 @@ const youtubeChannels: Channel[] = [
     streamUrl: 'https://www.youtube.com/watch?v=2wMpbwJ7koY',
     language: 'Hindi',
   },
+  {
+    id: 'yt-33',
+    name: 'WION News',
+    country: 'India',
+    category: 'News',
+    logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e0/WION_Logo.svg/1200px-WION_Logo.svg.png',
+    streamUrl: 'https://www.youtube.com/watch?v=tnA_0T_0A1s',
+    language: 'English',
+  },
+  {
+    id: 'yt-34',
+    name: 'India Today',
+    country: 'India',
+    category: 'News',
+    logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/28/India_Today_logo.svg/1200px-India_Today_logo.svg.png',
+    streamUrl: 'https://www.youtube.com/watch?v=Nq2wR3p6v-w',
+    language: 'English',
+  },
+  // Singapore
+  {
+    id: 'yt-35',
+    name: 'CNA 24/7',
+    country: 'Singapore',
+    category: 'News',
+    logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/8d/CNA_logo_2019.svg/1200px-CNA_logo_2019.svg.png',
+    streamUrl: 'https://www.youtube.com/watch?v=XWq5kBlakcQ',
+    language: 'English',
+  },
   // Australia
   {
     id: 'yt-19',
@@ -188,6 +279,15 @@ const youtubeChannels: Channel[] = [
     category: 'News',
     logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1e/Australian_Broadcasting_Corporation_logo.svg/1200px-Australian_Broadcasting_Corporation_logo.svg.png',
     streamUrl: 'https://www.youtube.com/watch?v=GXb4N5c0X2Q',
+    language: 'English',
+  },
+  {
+    id: 'yt-36',
+    name: 'Sky News Australia',
+    country: 'Australia',
+    category: 'News',
+    logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/88/Sky_News_Australia_logo_2020.svg/1200px-Sky_News_Australia_logo_2020.svg.png',
+    streamUrl: 'https://www.youtube.com/watch?v=s9U72iM9E1I',
     language: 'English',
   },
   // Canada
@@ -210,6 +310,15 @@ const youtubeChannels: Channel[] = [
     streamUrl: 'https://www.youtube.com/watch?v=ZqTEj9yyB7Y',
     language: 'English',
   },
+  {
+    id: 'yt-37',
+    name: 'SABC News',
+    country: 'South Africa',
+    category: 'News',
+    logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/7b/SABC_Logo.svg/1200px-SABC_Logo.svg.png',
+    streamUrl: 'https://www.youtube.com/watch?v=mC1i_eT8oTo',
+    language: 'English',
+  },
   // Turkey
   {
     id: 'yt-22',
@@ -228,6 +337,15 @@ const youtubeChannels: Channel[] = [
     category: 'News',
     logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1b/Arirang_TV_logo.svg/1200px-Arirang_TV_logo.svg.png',
     streamUrl: 'https://www.youtube.com/watch?v=HXgyr9W3C4M',
+    language: 'Korean',
+  },
+  {
+    id: 'yt-38',
+    name: 'YTN World',
+    country: 'South Korea',
+    category: 'News',
+    logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/08/YTN_logo.svg/1200px-YTN_logo.svg.png',
+    streamUrl: 'https://www.youtube.com/watch?v=GoXFb22L05E',
     language: 'Korean',
   },
   // Israel
@@ -249,6 +367,25 @@ const youtubeChannels: Channel[] = [
     logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/9c/Al_Arabiya_logo.svg/1200px-Al_Arabiya_logo.svg.png',
     streamUrl: 'https://www.youtube.com/watch?v=q-1h_ug0Xwg',
     language: 'Arabic',
+  },
+  // Entertainment / Music
+  {
+    id: 'yt-39',
+    name: 'Lofi Girl Live',
+    country: 'USA',
+    category: 'Music',
+    logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/02/Lofi_Girl_logo.svg/1200px-Lofi_Girl_logo.svg.png',
+    streamUrl: 'https://www.youtube.com/watch?v=jfKfPfyJRdk',
+    language: 'English',
+  },
+  {
+    id: 'yt-40',
+    name: 'Red Bull TV',
+    country: 'Austria',
+    category: 'Sports',
+    logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b3/Red_Bull_TV_logo.svg/1200px-Red_Bull_TV_logo.svg.png',
+    streamUrl: 'https://www.youtube.com/watch?v=1F3M5V0910A',
+    language: 'English',
   },
 ];
 
@@ -282,6 +419,15 @@ const iptvChannels: Channel[] = [
     streamUrl: 'https://cbsnewshd-lh.akamaihd.net/i/CBSNHD_7@199302/master.m3u8',
     language: 'English',
   },
+  {
+    id: 'iptv-9',
+    name: 'WeatherNation',
+    country: 'USA',
+    category: 'Weather',
+    logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d4/WeatherNation_TV_logo.svg/1200px-WeatherNation_TV_logo.svg.png',
+    streamUrl: 'https://weathernation.akamaized.net/hls/live/2012018/WN/master.m3u8',
+    language: 'English',
+  },
   // UK
   {
     id: 'iptv-4',
@@ -289,7 +435,7 @@ const iptvChannels: Channel[] = [
     country: 'UK',
     category: 'News',
     logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/9b/Sky_News_logo_2024.svg/1200px-Sky_News_logo_2024.svg.png',
-    streamUrl: 'https://www.youtube.com/watch?v=YjJ3tFDhKl8', // Fixed: using YouTube URL
+    streamUrl: 'https://www.youtube.com/watch?v=YjJ3tFDhKl8',
     language: 'English',
   },
   // France
@@ -301,6 +447,15 @@ const iptvChannels: Channel[] = [
     logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/03/France_24_Logo.svg/1200px-France_24_Logo.svg.png',
     streamUrl: 'https://www.youtube.com/watch?v=dYPg3w3QwRk',
     language: 'French',
+  },
+  {
+    id: 'iptv-10',
+    name: 'Euronews HD',
+    country: 'France',
+    category: 'News',
+    logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/74/Euronews_logo_2016.svg/1200px-Euronews_logo_2016.svg.png',
+    streamUrl: 'https://euronews-euronews-world-1-us.samsung.wurl.tv/playlist.m3u8',
+    language: 'English',
   },
   // Germany
   {
