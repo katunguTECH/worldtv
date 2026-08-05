@@ -102,7 +102,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ streamUrl, channelName }) => 
       }
 
       player.ready(() => {
-        player.play().catch((e: any) => console.warn('Autoplay prevented:', e));
+        player.play()?.catch((e: any) => console.warn('Autoplay prevented:', e));
       });
     } catch (error) {
       console.error('Error loading stream:', error);
