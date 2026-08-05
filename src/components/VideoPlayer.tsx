@@ -22,8 +22,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ streamUrl, channelName }) => 
     setIframeFailed(false);
 
     const url = streamUrl.toLowerCase();
-    
-    // Check for YouTube
+
+    // YouTube
     if (url.includes('youtube.com/watch') || url.includes('youtu.be')) {
       setIsWebsite(true);
       let videoId = '';
@@ -31,31 +31,27 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ streamUrl, channelName }) => 
         videoId = url.split('youtu.be/')[1]?.split('?')[0] || '';
       } else {
         try {
-          const urlParams = new URL(streamUrl).searchParams;
-          videoId = urlParams.get('v') || '';
-        } catch (e) {
-          // If URL parsing fails
+          videoId = new URL(streamUrl).searchParams.get('v') || '';
+        } catch {
+          // ignore
         }
       }
-      if (videoId) {
-        setIframeUrl(`https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0`);
-      } else {
-        setIframeUrl(streamUrl);
-      }
+      setIframeUrl(videoId
+        ? `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0`
+        : streamUrl);
       return;
     }
 
-    // Check if it's a website URL
-    const isWebsiteUrl = url.includes('.com') || url.includes('.org') || url.includes('.tv') || 
-                         url.includes('/live') || url.includes('/watch');
-    
-    if (isWebsiteUrl) {
+    // Classify by file extension, not domain guessing — a stream host's
+    // domain can easily contain ".tv" or "/live" and get misclassified.
+    const isDirectMedia = url.endsWith('.m3u8') || url.endsWith('.mp4') || url.includes('.m3u8?');
+
+    if (!isDirectMedia) {
       setIsWebsite(true);
       setIframeUrl(streamUrl);
       return;
     }
 
-    // For video streams
     if (!videoRef.current) return;
 
     if (playerRef.current) {
@@ -79,17 +75,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ streamUrl, channelName }) => 
       },
       controlBar: {
         children: [
-          'playToggle',
-          'volumePanel',
-          'currentTimeDisplay',
-          'timeDivider',
-          'durationDisplay',
-          'progressControl',
-          'liveDisplay',
-          'seekToLive',
-          'remainingTimeDisplay',
-          'playbackRateMenuButton',
-          'fullscreenToggle',
+          'playToggle', 'volumePanel', 'currentTimeDisplay', 'timeDivider',
+          'durationDisplay', 'progressControl', 'liveDisplay', 'seekToLive',
+          'remainingTimeDisplay', 'playbackRateMenuButton', 'fullscreenToggle',
         ],
       },
     });
@@ -98,28 +86,23 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ streamUrl, channelName }) => 
 
     player.on('error', (e: any) => {
       console.error('Video player error:', e);
-      setLoadError('Failed to load stream. Try opening in new tab.');
+      setLoadError('This stream is currently unavailable. Try opening it directly.');
     });
 
     try {
-      if (streamUrl.endsWith('.m3u8')) {
+      if (url.endsWith('.m3u8') || url.includes('.m3u8?')) {
+        // Route through our own proxy so CORS/referrer blocks on the
+        // origin stream host don't kill playback.
         player.src({
-          src: streamUrl,
+          src: `/api/proxy?url=${encodeURIComponent(streamUrl)}`,
           type: 'application/x-mpegURL',
         });
       } else {
-        player.src({
-          src: streamUrl,
-          type: 'video/mp4',
-        });
+        player.src({ src: streamUrl, type: 'video/mp4' });
       }
 
       player.ready(() => {
-        try {
-          player.play();
-        } catch (e) {
-          console.warn('Autoplay prevented:', e);
-        }
+        player.play().catch((e: any) => console.warn('Autoplay prevented:', e));
       });
     } catch (error) {
       console.error('Error loading stream:', error);
@@ -136,7 +119,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ streamUrl, channelName }) => 
 
   const posterImage = `data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='100%25' height='100%25'><rect width='100%25' height='100%25' fill='%231a1a1a'/><text x='50%25' y='50%25' font-family='Arial' font-size='20' fill='%23666' text-anchor='middle' dy='.3em'>${channelName}</text></svg>`;
 
-  // Website with iframe
   if (isWebsite) {
     if (iframeFailed) {
       return (
@@ -169,7 +151,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ streamUrl, channelName }) => 
           style={{ border: 'none' }}
           loading="lazy"
           onError={() => setIframeFailed(true)}
-          onLoad={() => console.log('Iframe loaded successfully')}
         />
         <div className="absolute bottom-4 right-4 z-10">
           <button
@@ -183,7 +164,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ streamUrl, channelName }) => 
     );
   }
 
-  // Error state for video streams
   if (loadError) {
     return (
       <div className="bg-gray-900 rounded-lg p-8 text-center">
@@ -200,15 +180,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ streamUrl, channelName }) => 
     );
   }
 
-  // Video player for actual streams
   return (
     <div data-vjs-player className="bg-black rounded-lg overflow-hidden">
-      <video 
-        ref={videoRef} 
-        className="video-js vjs-big-play-centered vjs-theme-city" 
-        poster={posterImage}
-        playsInline
-      />
+      <video ref={videoRef} className="video-js vjs-big-play-centered vjs-theme-city" poster={posterImage} playsInline />
     </div>
   );
 };
