@@ -42,15 +42,11 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ streamUrl, channelName }) => 
       return;
     }
 
-    // Classify by file extension, not domain guessing — a stream host's
-    // domain can easily contain ".tv" or "/live" and get misclassified.
-    const isDirectMedia = url.endsWith('.m3u8') || url.endsWith('.mp4') || url.includes('.m3u8?');
-
-    if (!isDirectMedia) {
-      setIsWebsite(true);
-      setIframeUrl(streamUrl);
-      return;
-    }
+    // Everything that isn't YouTube comes from iptv-org's raw stream data —
+    // treat it as a media stream by default (via video.js + our proxy),
+    // not a website. This also avoids mixed-content blocks on http:// stream
+    // URLs, since the proxy fetches server-side regardless of protocol.
+    const isExplicitMp4 = url.endsWith('.mp4');
 
     if (!videoRef.current) return;
 
@@ -90,15 +86,19 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ streamUrl, channelName }) => 
     });
 
     try {
-      if (url.endsWith('.m3u8') || url.includes('.m3u8?')) {
-        // Route through our own proxy so CORS/referrer blocks on the
-        // origin stream host don't kill playback.
+      if (isExplicitMp4) {
+        // Even mp4s get routed through the proxy if they're http, to avoid
+        // mixed content; harmless for https sources too.
+        player.src({
+          src: `/api/proxy?url=${encodeURIComponent(streamUrl)}`,
+          type: 'video/mp4',
+        });
+      } else {
+        // Default assumption: HLS live stream, proxied.
         player.src({
           src: `/api/proxy?url=${encodeURIComponent(streamUrl)}`,
           type: 'application/x-mpegURL',
         });
-      } else {
-        player.src({ src: streamUrl, type: 'video/mp4' });
       }
 
       player.ready(() => {
