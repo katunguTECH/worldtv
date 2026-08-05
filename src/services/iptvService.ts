@@ -4,7 +4,7 @@ import { Channel } from '../types/channel.types';
 const CACHE_KEY = 'iptv_channels';
 const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
 
-// ===== COMPLETE YOUTUBE CHANNELS LIST (40+ channels) =====
+// ===== COMPLETE YOUTUBE CHANNELS LIST (40 channels) =====
 const youtubeChannels: Channel[] = [
   // USA
   {
@@ -416,7 +416,7 @@ const iptvChannels: Channel[] = [
     country: 'USA',
     category: 'News',
     logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6d/CBS_News_logo_2021.svg/1200px-CBS_News_logo_2021.svg.png',
-    streamUrl: 'https://cbsnewshd-lh.akamaihd.net/i/CBSNHD_7@199302/master.m3u8',
+    streamUrl: 'https://www.youtube.com/watch?v=NlgB8jQ9gG0',
     language: 'English',
   },
   {
