@@ -28,6 +28,15 @@ function App() {
   const categories = getCategories();
   const { favorites, toggleFavorite, isFavorite } = useFavorites();
 
+  // Track this visit once on load
+  useEffect(() => {
+    fetch('/api/track-visit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: window.location.pathname }),
+    }).catch(() => {});
+  }, []);
+
   useEffect(() => {
     const loadChannels = async () => {
       setLoading(true);

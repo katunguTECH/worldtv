@@ -1,14 +1,141 @@
 const express = require('express');
 const path = require('path');
+const { MongoClient } = require('mongodb');
 const app = express();
 
 const PORT = process.env.PORT || 10000;
-const STATIC_DIR = process.env.STATIC_DIR || 'build'; // 'dist' if you're on Vite
+const STATIC_DIR = process.env.STATIC_DIR || 'build';
+
+app.set('trust proxy', true); // so req.ip reflects the real visitor IP behind Render's proxy
 
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, x-admin-key');
   next();
+});
+app.use(express.json());
+
+// ---------------- MongoDB ----------------
+let usersCollection;
+let visitsCollection;
+async function initDb() {
+  if (!process.env.MONGODB_URI) {
+    console.warn('MONGODB_URI not set — user/visit recording disabled');
+    return;
+  }
+  try {
+    const client = new MongoClient(process.env.MONGODB_URI);
+    await client.connect();
+    const db = client.db('worldtv');
+    usersCollection = db.collection('users');
+    visitsCollection = db.collection('visits');
+    console.log('Connected to MongoDB');
+  } catch (e) {
+    console.error('MongoDB connection failed:', e.message);
+  }
+}
+initDb();
+
+// ---------------- users (email capture) ----------------
+app.post('/api/users', async (req, res) => {
+  const { email } = req.body;
+  if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
+    return res.status(400).json({ error: 'Valid email required' });
+  }
+  if (!usersCollection) {
+    return res.status(503).json({ error: 'Database unavailable' });
+  }
+  try {
+    await usersCollection.updateOne(
+      { email },
+      { $set: { email, lastSeen: new Date() }, $setOnInsert: { firstSeen: new Date() } },
+      { upsert: true }
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('DB error:', e.message);
+    res.status(500).json({ error: 'Failed to save' });
+  }
+});
+
+// ---------------- visit tracking ----------------
+async function geolocateIp(ip) {
+  if (!ip || ip === '::1' || ip.startsWith('127.') || ip.startsWith('192.168.') || ip.startsWith('10.')) {
+    return { country: 'Local/Unknown', city: 'Local/Unknown' };
+  }
+  try {
+    const cleanIp = ip.replace('::ffff:', '');
+    const res = await fetch(`http://ip-api.com/json/${cleanIp}?fields=status,country,city`);
+    const data = await res.json();
+    if (data.status === 'success') {
+      return { country: data.country || 'Unknown', city: data.city || 'Unknown' };
+    }
+  } catch (e) {
+    console.warn('Geolocation failed:', e.message);
+  }
+  return { country: 'Unknown', city: 'Unknown' };
+}
+
+app.post('/api/track-visit', async (req, res) => {
+  if (!visitsCollection) return res.json({ ok: false });
+  try {
+    const ip = req.ip || req.headers['x-forwarded-for'] || 'unknown';
+    const location = await geolocateIp(ip);
+    await visitsCollection.insertOne({
+      ip,
+      country: location.country,
+      city: location.city,
+      path: req.body?.path || '/',
+      timestamp: new Date(),
+    });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('Visit tracking error:', e.message);
+    res.json({ ok: false });
+  }
+});
+
+// ---------------- admin ----------------
+function requireAdmin(req, res, next) {
+  const key = req.headers['x-admin-key'];
+  if (!process.env.ADMIN_KEY || key !== process.env.ADMIN_KEY) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  next();
+}
+
+app.get('/api/admin/stats', requireAdmin, async (req, res) => {
+  if (!visitsCollection || !usersCollection) {
+    return res.status(503).json({ error: 'Database unavailable' });
+  }
+  try {
+    const now = new Date();
+    const dayAgo = new Date(now - 24 * 60 * 60 * 1000);
+    const weekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
+
+    const [visitsAllTime, visitsDay, visitsWeek, recentVisits] = await Promise.all([
+      visitsCollection.countDocuments({}),
+      visitsCollection.countDocuments({ timestamp: { $gte: dayAgo } }),
+      visitsCollection.countDocuments({ timestamp: { $gte: weekAgo } }),
+      visitsCollection.find({}).sort({ timestamp: -1 }).limit(100).toArray(),
+    ]);
+
+    const [usersAllTime, usersDay, usersWeek, allUsers] = await Promise.all([
+      usersCollection.countDocuments({}),
+      usersCollection.countDocuments({ firstSeen: { $gte: dayAgo } }),
+      usersCollection.countDocuments({ firstSeen: { $gte: weekAgo } }),
+      usersCollection.find({}).sort({ firstSeen: -1 }).toArray(),
+    ]);
+
+    res.json({
+      visits: { allTime: visitsAllTime, day: visitsDay, week: visitsWeek, recent: recentVisits },
+      users: { allTime: usersAllTime, day: usersDay, week: usersWeek, list: allUsers },
+    });
+  } catch (e) {
+    console.error('Admin stats error:', e.message);
+    res.status(500).json({ error: 'Failed to load stats' });
+  }
 });
 
 // ---------------- channel cache ----------------
@@ -123,9 +250,6 @@ app.get('/api/refresh', async (req, res) => {
 });
 
 // ---------------- stream proxy ----------------
-// Fetches the manifest/segment server-side so the browser never hits CORS
-// or referrer blocks on random stream hosts. Rewrites .m3u8 URIs to route
-// back through this same proxy.
 app.get('/api/proxy', async (req, res) => {
   const target = req.query.url;
   if (!target) return res.status(400).send('Missing url param');
