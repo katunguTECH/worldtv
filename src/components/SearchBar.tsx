@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 interface SearchBarProps {
   value: string;
@@ -6,31 +6,36 @@ interface SearchBarProps {
 }
 
 const SearchBar: React.FC<SearchBarProps> = ({ value, onChange }) => {
+  const [localValue, setLocalValue] = useState(value);
+  const onChangeRef = useRef(onChange);
+  const valueRef = useRef(value);
+
+  onChangeRef.current = onChange;
+  valueRef.current = value;
+
+  useEffect(() => {
+    setLocalValue(value);
+  }, [value]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (localValue !== valueRef.current) {
+        onChangeRef.current(localValue);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [localValue]);
+
   return (
     <div className="relative">
+      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">🔍</span>
       <input
         type="text"
-        placeholder="🔍 Search channels by name, country, or category..."
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full px-4 py-2.5 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 pl-11 text-sm"
+        value={localValue}
+        onChange={(e) => setLocalValue(e.target.value)}
+        placeholder="Search channels by name, country, or category..."
+        className="w-full bg-gray-700 text-white rounded-lg pl-10 pr-3 py-3 outline-none focus:ring-2 focus:ring-blue-500 text-base"
       />
-      <svg 
-        className="absolute left-3 top-3 h-5 w-5 text-gray-400"
-        fill="none" 
-        stroke="currentColor" 
-        viewBox="0 0 24 24"
-      >
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-      </svg>
-      {value && (
-        <button
-          onClick={() => onChange('')}
-          className="absolute right-3 top-2.5 text-gray-400 hover:text-white"
-        >
-          ✕
-        </button>
-      )}
     </div>
   );
 };

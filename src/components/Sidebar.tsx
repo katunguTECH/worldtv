@@ -1,68 +1,91 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 interface SidebarProps {
   selectedCountry: string;
   onCountrySelect: (country: string) => void;
   countries: string[];
-  selectedCategory?: string;
-  onCategorySelect?: (category: string) => void;
-  categories?: string[];
+  selectedCategory: string;
+  onCategorySelect: (category: string) => void;
+  categories: string[];
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ 
-  selectedCountry, 
-  onCountrySelect, 
+const Sidebar: React.FC<SidebarProps> = ({
+  selectedCountry,
+  onCountrySelect,
   countries,
   selectedCategory,
   onCategorySelect,
-  categories 
+  categories,
 }) => {
-  return (
-    <div className="w-64 bg-gray-800 border-r border-gray-700 p-4 overflow-y-auto hidden md:block">
-      <h2 className="text-white font-bold mb-4 text-lg">🌍 Countries</h2>
-      <div className="space-y-1 mb-4">
-        {countries.map((country) => (
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  const content = (
+    <div className="p-4 overflow-y-auto h-full">
+      <h2 className="text-white font-semibold mb-2">🌍 Countries</h2>
+      <div className="space-y-1 mb-6">
+        {countries.map((c) => (
           <button
-            key={country}
-            onClick={() => onCountrySelect(country)}
+            key={c}
+            onClick={() => {
+              onCountrySelect(c);
+              setMobileOpen(false);
+            }}
             className={`w-full text-left px-3 py-2 rounded transition ${
-              selectedCountry === country
-                ? 'bg-blue-600 text-white'
-                : 'text-gray-300 hover:bg-gray-700'
+              selectedCountry === c ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-700'
             }`}
           >
-            {country === 'All' ? '🌐 All Countries' : country}
+            {c}
           </button>
         ))}
       </div>
-      
-      {categories && onCategorySelect && (
+
+      {categories.length > 1 && (
         <>
-          <h2 className="text-white font-bold mb-4 text-lg mt-6">📺 Categories</h2>
+          <h2 className="text-white font-semibold mb-2">Categories</h2>
           <div className="space-y-1">
-            {categories.map((category) => (
+            {categories.map((c) => (
               <button
-                key={category}
-                onClick={() => onCategorySelect(category)}
+                key={c}
+                onClick={() => {
+                  onCategorySelect(c);
+                  setMobileOpen(false);
+                }}
                 className={`w-full text-left px-3 py-2 rounded transition ${
-                  selectedCategory === category
-                    ? 'bg-blue-600 text-white'
-                    : 'text-gray-300 hover:bg-gray-700'
+                  selectedCategory === c ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-700'
                 }`}
               >
-                {category === 'All' ? '📋 All Categories' : category}
+                {c}
               </button>
             ))}
           </div>
         </>
       )}
-      
-      <div className="mt-6 pt-6 border-t border-gray-700">
-        <p className="text-gray-500 text-xs">
-          📡 {countries.length - 1} countries available
-        </p>
-      </div>
     </div>
+  );
+
+  return (
+    <>
+      <aside className="hidden lg:block w-64 bg-gray-800 border-r border-gray-700 flex-shrink-0">
+        {content}
+      </aside>
+
+      <div className="lg:hidden">
+        <button
+          onClick={() => setMobileOpen(true)}
+          className="fixed bottom-4 left-4 z-30 bg-blue-600 hover:bg-blue-700 text-white rounded-full w-12 h-12 flex items-center justify-center shadow-lg text-xl"
+          aria-label="Open filters"
+        >
+          🌍
+        </button>
+
+        {mobileOpen && (
+          <div className="fixed inset-0 z-40 flex">
+            <div className="w-72 max-w-[80vw] bg-gray-800 h-full">{content}</div>
+            <div className="flex-1 bg-black/60" onClick={() => setMobileOpen(false)} />
+          </div>
+        )}
+      </div>
+    </>
   );
 };
 

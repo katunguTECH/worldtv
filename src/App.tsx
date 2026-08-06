@@ -12,6 +12,7 @@ import SearchBar from './components/SearchBar';
 import Sidebar from './components/Sidebar';
 import ChannelGrid from './components/ChannelGrid';
 import VideoPlayer from './components/VideoPlayer';
+import EmailGate from './components/EmailGate';
 import { useFavorites } from './hooks/useFavorites';
 
 function App() {
@@ -21,12 +22,12 @@ function App() {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
   const [currentChannels, setCurrentChannels] = useState<Channel[]>([]);
-  
+  const [hasEmail, setHasEmail] = useState<boolean>(() => !!localStorage.getItem('worldtv_email'));
+
   const countries = getCountries();
   const categories = getCategories();
   const { favorites, toggleFavorite, isFavorite } = useFavorites();
 
-  // Initialize channels on mount
   useEffect(() => {
     const loadChannels = async () => {
       setLoading(true);
@@ -46,11 +47,10 @@ function App() {
     loadChannels();
   }, []);
 
-  // Update channels when filters change
   useEffect(() => {
     if (loading) return;
-    
-    let channels = [];
+
+    let channels: Channel[] = [];
     if (searchQuery) {
       channels = searchChannels(searchQuery);
     } else {
@@ -132,7 +132,6 @@ function App() {
         onCategorySelect={handleCategorySelect}
         categories={categories}
       />
-
       <div className="flex-1 flex flex-col overflow-hidden">
         <header className="p-4 border-b border-gray-700 bg-gray-800">
           <div className="flex items-center justify-between mb-3">
@@ -163,7 +162,6 @@ function App() {
           </div>
           <SearchBar value={searchQuery} onChange={setSearchQuery} />
         </header>
-
         <main className="flex-1 overflow-y-auto p-4">
           <ChannelGrid
             channels={currentChannels}
@@ -174,7 +172,6 @@ function App() {
           />
         </main>
       </div>
-
       {selectedChannel && (
         <div
           className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4"
@@ -210,14 +207,15 @@ function App() {
                 ✕
               </button>
             </div>
-
-            <div className="p-4">
-              <VideoPlayer 
-                streamUrl={selectedChannel.streamUrl} 
-                channelName={selectedChannel.name} 
-              />
+            <div className="p-4 relative">
+              {!hasEmail && <EmailGate onSubmit={() => setHasEmail(true)} />}
+              {hasEmail && (
+                <VideoPlayer 
+                  streamUrl={selectedChannel.streamUrl} 
+                  channelName={selectedChannel.name} 
+                />
+              )}
             </div>
-
             <div className="p-4 border-t border-gray-700 bg-gray-800/50">
               <div className="flex items-center justify-between text-sm">
                 <div className="text-gray-400 truncate">

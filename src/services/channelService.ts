@@ -1,140 +1,65 @@
 import { Channel } from '../types/channel.types';
-import { fetchIPTVChannels, getIPTVChannelsByCountry, getAvailableCountries } from './iptvService';
+import { fetchIPTVChannels, forceRefreshChannels } from './iptvService';
 
-let cachedChannels: Channel[] = [];
-let countries: string[] = [];
-let categories: string[] = [];
+let allChannels: Channel[] = [];
+let countryIndex: Map<string, Channel[]> = new Map();
+let searchIndex: { channel: Channel; haystack: string }[] = [];
+let countries: string[] = ['All'];
+let categories: string[] = ['All'];
 
-// Initialize channels - call this once when app starts
+function buildIndexes(channels: Channel[]) {
+  allChannels = channels;
+  countryIndex = new Map();
+  searchIndex = [];
+  const countrySet = new Set<string>();
+  const categorySet = new Set<string>();
+
+  for (const ch of channels) {
+    countrySet.add(ch.country);
+    categorySet.add(ch.category);
+
+    if (!countryIndex.has(ch.country)) countryIndex.set(ch.country, []);
+    countryIndex.get(ch.country)!.push(ch);
+
+    searchIndex.push({
+      channel: ch,
+      haystack: `${ch.name} ${ch.country} ${ch.category}`.toLowerCase(),
+    });
+  }
+
+  countries = ['All', ...Array.from(countrySet).sort()];
+  categories = ['All', ...Array.from(categorySet).sort()];
+}
+
 export const initializeChannels = async (): Promise<void> => {
-  try {
-    console.log('🚀 Initializing channels...');
-    cachedChannels = await fetchIPTVChannels();
-    
-    // Update countries list
-    countries = getAvailableCountries(cachedChannels);
-    
-    // Update categories list
-    const categorySet = new Set(cachedChannels.map(ch => ch.category));
-    categories = ['All', ...Array.from(categorySet)].sort();
-    
-    console.log(`✅ Channels initialized: ${cachedChannels.length} channels, ${countries.length - 1} countries, ${categories.length - 1} categories`);
-  } catch (error) {
-    console.error('❌ Error initializing channels:', error);
-    cachedChannels = [];
-    countries = ['All'];
-    categories = ['All'];
-  }
+  const channels = await fetchIPTVChannels();
+  buildIndexes(channels);
 };
 
-// Get all channels
-export const getAllChannels = (): Channel[] => {
-  return cachedChannels;
-};
-
-// Get unique countries
-export const getCountries = (): string[] => {
-  return countries;
-};
-
-// Get unique categories
-export const getCategories = (): string[] => {
-  return categories;
-};
-
-// Get channels by country
-export const getChannelsByCountry = (country: string): Channel[] => {
-  if (country === 'All') return cachedChannels;
-  return getIPTVChannelsByCountry(cachedChannels, country);
-};
-
-// Search channels by name, country, or category
-export const searchChannels = (query: string): Channel[] => {
-  if (!query.trim()) return cachedChannels;
-  const lowerQuery = query.toLowerCase().trim();
-  return cachedChannels.filter(ch => 
-    ch.name.toLowerCase().includes(lowerQuery) ||
-    ch.country.toLowerCase().includes(lowerQuery) ||
-    ch.category.toLowerCase().includes(lowerQuery) ||
-    ch.language.toLowerCase().includes(lowerQuery)
-  );
-};
-
-// Get channel by ID
-export const getChannelById = (id: string): Channel | undefined => {
-  return cachedChannels.find(ch => ch.id === id);
-};
-
-// Get channels by category
-export const getChannelsByCategory = (category: string): Channel[] => {
-  if (category === 'All') return cachedChannels;
-  return cachedChannels.filter(ch => ch.category === category);
-};
-
-// Get channels by language
-export const getChannelsByLanguage = (language: string): Channel[] => {
-  if (language === 'All') return cachedChannels;
-  return cachedChannels.filter(ch => ch.language === language);
-};
-
-// Get all unique languages
-export const getLanguages = (): string[] => {
-  const languageSet = new Set(cachedChannels.map(ch => ch.language));
-  return ['All', ...Array.from(languageSet)].sort();
-};
-
-// Get a random channel
-export const getRandomChannel = (): Channel | undefined => {
-  if (cachedChannels.length === 0) return undefined;
-  const randomIndex = Math.floor(Math.random() * cachedChannels.length);
-  return cachedChannels[randomIndex];
-};
-
-// Get channel count
-export const getChannelCount = (): number => {
-  return cachedChannels.length;
-};
-
-// Get country count
-export const getCountryCount = (): number => {
-  return countries.length - 1;
-};
-
-// Check if channels are loaded
-export const isChannelsLoaded = (): boolean => {
-  return cachedChannels.length > 0;
-};
-
-// Refresh channels (force update)
 export const refreshChannels = async (): Promise<void> => {
-  console.log('🔄 Refreshing channels...');
-  localStorage.removeItem('iptv_channels');
-  await initializeChannels();
+  const channels = await forceRefreshChannels();
+  buildIndexes(channels);
 };
 
-// Get channels with pagination
-export const getPaginatedChannels = (
-  page: number = 1,
-  pageSize: number = 50,
-  country: string = 'All',
-  category: string = 'All'
-): { channels: Channel[]; total: number } => {
-  let filtered = cachedChannels;
-  
-  if (country !== 'All') {
-    filtered = filtered.filter(ch => ch.country === country);
+export const getCountries = (): string[] => countries;
+export const getCategories = (): string[] => categories;
+
+export const getChannelsByCountry = (country: string): Channel[] => {
+  if (country === 'All') return allChannels;
+  return countryIndex.get(country) || [];
+};
+
+// Capped at 500 results — beyond that nobody's scrolling anyway, and it
+// keeps the render fast even on a broad, low-specificity query.
+export const searchChannels = (query: string): Channel[] => {
+  const q = query.trim().toLowerCase();
+  if (!q) return allChannels;
+  const results: Channel[] = [];
+  for (const entry of searchIndex) {
+    if (entry.haystack.includes(q)) {
+      results.push(entry.channel);
+      if (results.length >= 500) break;
+    }
   }
-  
-  if (category !== 'All') {
-    filtered = filtered.filter(ch => ch.category === category);
-  }
-  
-  const total = filtered.length;
-  const start = (page - 1) * pageSize;
-  const end = start + pageSize;
-  
-  return {
-    channels: filtered.slice(start, end),
-    total: total
-  };
+  return results;
 };
