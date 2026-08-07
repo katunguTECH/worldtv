@@ -1,6 +1,6 @@
 ﻿import React from 'react';
 
-const WHATSAPP_NUMBER = '24710440648';
+const WHATSAPP_NUMBER = '254710440648';
 
 const WhatsAppButton: React.FC = () => {
   const link = 'https://wa.me/' + WHATSAPP_NUMBER + '?text=' + encodeURIComponent('Hi, I have a question about WorldTV.');
