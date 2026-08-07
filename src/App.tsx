@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { Channel } from './types/channel.types';
-import { 
-  initializeChannels, 
-  getCountries, 
-  getCategories, 
-  getChannelsByCountry, 
+import {
+  initializeChannels,
+  getCountries,
+  getCategories,
+  getChannelsByCountry,
   searchChannels,
   refreshChannels
 } from './services/channelService';
@@ -13,6 +13,7 @@ import Sidebar from './components/Sidebar';
 import ChannelGrid from './components/ChannelGrid';
 import VideoPlayer from './components/VideoPlayer';
 import EmailGate from './components/EmailGate';
+import WhatsAppButton from './components/WhatsAppButton';
 import { useFavorites } from './hooks/useFavorites';
 
 function App() {
@@ -28,7 +29,6 @@ function App() {
   const categories = getCategories();
   const { favorites, toggleFavorite, isFavorite } = useFavorites();
 
-  // Track this visit once on load
   useEffect(() => {
     fetch('/api/track-visit', {
       method: 'POST',
@@ -41,14 +41,14 @@ function App() {
     const loadChannels = async () => {
       setLoading(true);
       try {
-        console.log('🚀 App: Loading channels...');
+        console.log('App: Loading channels...');
         await initializeChannels();
-        console.log('📊 App: Channels initialized, loading from service...');
+        console.log('App: Channels initialized, loading from service...');
         const channels = getChannelsByCountry('All');
-        console.log(`📺 App: Loaded ${channels.length} channels`);
+        console.log('App: Loaded ' + channels.length + ' channels');
         setCurrentChannels(channels);
       } catch (error) {
-        console.error('❌ App: Error loading channels:', error);
+        console.error('App: Error loading channels:', error);
       } finally {
         setLoading(false);
       }
@@ -98,13 +98,13 @@ function App() {
   const handleRefreshChannels = async () => {
     setLoading(true);
     try {
-      console.log('🔄 Refreshing channels...');
+      console.log('Refreshing channels...');
       await refreshChannels();
       const channels = getChannelsByCountry('All');
-      console.log(`📺 App: Refreshed ${channels.length} channels`);
+      console.log('App: Refreshed ' + channels.length + ' channels');
       setCurrentChannels(channels);
     } catch (error) {
-      console.error('❌ App: Error refreshing channels:', error);
+      console.error('App: Error refreshing channels:', error);
     } finally {
       setLoading(false);
     }
@@ -123,7 +123,7 @@ function App() {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-900">
         <div className="text-center">
-          <div className="text-white text-4xl mb-4">🌍</div>
+          <div className="text-white text-4xl mb-4">Loading</div>
           <div className="text-white text-xl animate-pulse">Loading channels...</div>
           <div className="text-gray-400 text-sm mt-2">This may take a moment</div>
         </div>
@@ -144,7 +144,7 @@ function App() {
       <div className="flex-1 flex flex-col overflow-hidden">
         <header className="p-4 border-b border-gray-700 bg-gray-800">
           <div className="flex items-center justify-between mb-3">
-            <h1 className="text-white text-2xl font-bold">🌍 WorldTV</h1>
+            <h1 className="text-white text-2xl font-bold">WorldTV</h1>
             <div className="flex items-center gap-2">
               <span className="text-gray-400 text-sm">
                 {currentChannels.length} channels
@@ -153,19 +153,19 @@ function App() {
                 onClick={handleClearCache}
                 className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg transition flex items-center gap-1 text-sm"
               >
-                🗑️ Clear
+                Clear
               </button>
               <button
                 onClick={handleRefreshChannels}
                 className="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg transition flex items-center gap-1 text-sm"
               >
-                🔄 Refresh
+                Refresh
               </button>
               <button
                 onClick={handleRandomChannel}
                 className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg transition flex items-center gap-1 text-sm"
               >
-                🎲 Random
+                Random
               </button>
             </div>
           </div>
@@ -201,11 +201,9 @@ function App() {
                   <span className="text-gray-500 text-sm">{selectedChannel.language}</span>
                   <button
                     onClick={() => toggleFavorite(selectedChannel.id)}
-                    className={`text-xl transition ${
-                      isFavorite(selectedChannel.id) ? 'text-yellow-400' : 'text-gray-500 hover:text-yellow-400'
-                    }`}
+                    className={isFavorite(selectedChannel.id) ? 'text-xl transition text-yellow-400' : 'text-xl transition text-gray-500 hover:text-yellow-400'}
                   >
-                    {isFavorite(selectedChannel.id) ? '⭐' : '☆'}
+                    {isFavorite(selectedChannel.id) ? 'Fav' : 'Not fav'}
                   </button>
                 </div>
               </div>
@@ -213,15 +211,15 @@ function App() {
                 onClick={handleCloseModal}
                 className="text-gray-400 hover:text-white text-2xl leading-none ml-4"
               >
-                ✕
+                Close
               </button>
             </div>
             <div className="p-4 relative">
               {!hasEmail && <EmailGate onSubmit={() => setHasEmail(true)} />}
               {hasEmail && (
-                <VideoPlayer 
-                  streamUrl={selectedChannel.streamUrl} 
-                  channelName={selectedChannel.name} 
+                <VideoPlayer
+                  streamUrl={selectedChannel.streamUrl}
+                  channelName={selectedChannel.name}
                 />
               )}
             </div>
@@ -237,13 +235,14 @@ function App() {
                   onClick={() => window.open(selectedChannel.streamUrl, '_blank')}
                   className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition flex items-center gap-2"
                 >
-                  ↗ Open in new tab
+                  Open in new tab
                 </button>
               </div>
             </div>
           </div>
         </div>
       )}
+      <WhatsAppButton />
     </div>
   );
 }
