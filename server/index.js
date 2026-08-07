@@ -29,7 +29,9 @@ async function initDb() {
     return;
   }
   try {
-    const client = new MongoClient(process.env.MONGODB_URI);
+    const client = new MongoClient(process.env.MONGODB_URI, {
+      family: 4, // force IPv4 — fixes SSL alert 80 handshake failures against Atlas on some cloud networks
+    });
     await client.connect();
     const db = client.db('worldtv');
     usersCollection = db.collection('users');
