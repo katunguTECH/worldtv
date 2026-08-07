@@ -1,10 +1,14 @@
 const express = require('express');
 const path = require('path');
 const { MongoClient } = require('mongodb');
+const { Agent, setGlobalDispatcher } = require('undici');
 const app = express();
 
 const PORT = process.env.PORT || 10000;
 const STATIC_DIR = process.env.STATIC_DIR || 'build';
+
+// Connection pooling/keep-alive to reduce per-segment connection overhead
+setGlobalDispatcher(new Agent({ connections: 50, keepAliveTimeout: 30000 }));
 
 app.set('trust proxy', true); // so req.ip reflects the real visitor IP behind Render's proxy
 
@@ -155,6 +159,27 @@ const NAME_MAP = {
 };
 const COUNTRY_CODES = Object.keys(NAME_MAP);
 
+// Verified real YouTube channels (channel ID, not video ID — this always
+// resolves to whatever is currently live on that channel, so it never
+// goes stale the way a hardcoded video ID would).
+const YOUTUBE_LIVE_CHANNELS = [
+  { id: 'yt-citizen-tv-kenya', name: 'Citizen TV Kenya', country: 'Kenya', channelId: 'UChBQgieUidXV1CmDxSdRm3g' },
+  { id: 'yt-k24-tv-kenya', name: 'K24 TV', country: 'Kenya', channelId: 'UCt3SE-Mvs3WwP7UW-PiFdqQ' },
+  { id: 'yt-aljazeera-english', name: 'Al Jazeera English', country: 'International', channelId: 'UCNye-wNBqNL5ZzHSJj3l8Bg' },
+];
+
+function getYoutubeChannels() {
+  return YOUTUBE_LIVE_CHANNELS.map((c) => ({
+    id: c.id,
+    name: c.name,
+    logo: '',
+    country: c.country,
+    category: 'News',
+    language: 'Unknown',
+    streamUrl: `https://www.youtube.com/embed/live_stream?channel=${c.channelId}`,
+  }));
+}
+
 function parseM3U(content, countryName) {
   const lines = content.split('\n');
   const channels = [];
@@ -229,7 +254,8 @@ async function loadChannels() {
     return channelCache.data;
   }
   console.log('Refreshing channel cache from iptv-org...');
-  const channels = await pool(COUNTRY_CODES, 8, fetchCountry);
+  const iptvChannels = await pool(COUNTRY_CODES, 8, fetchCountry);
+  const channels = [...iptvChannels, ...getYoutubeChannels()];
   if (channels.length) channelCache = { data: channels, timestamp: Date.now() };
   return channelCache.data;
 }
@@ -269,6 +295,15 @@ app.get('/api/proxy', async (req, res) => {
 
     if (isManifest) {
       const text = await upstream.text();
+
+      // Some CDNs return an HTML error page with a 200 status instead of
+      // a real HTTP error when a stream has expired. Catch that here
+      // instead of forwarding garbage that causes a "corruption" error
+      // client-side.
+      if (!text.trim().startsWith('#EXTM3U')) {
+        return res.status(502).send('Upstream returned invalid playlist');
+      }
+
       const base = new URL(target);
       const rewritten = text
         .split('\n')
@@ -293,6 +328,11 @@ app.get('/api/proxy', async (req, res) => {
     }
 
     res.set('Content-Type', contentType || 'application/octet-stream');
+    // Segments are immutable once published — safe to cache briefly to
+    // cut repeat-fetch overhead during rebuffers.
+    if (target.includes('.ts') || target.includes('.aac')) {
+      res.set('Cache-Control', 'public, max-age=30');
+    }
     const buffer = Buffer.from(await upstream.arrayBuffer());
     return res.send(buffer);
   } catch (e) {
