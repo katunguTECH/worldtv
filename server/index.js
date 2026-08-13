@@ -46,6 +46,19 @@ app.use((req, res, next) => {
 app.use(express.json());
 
 // ============================================================
+// STATIC FRONTEND ASSETS
+// ============================================================
+// Serves JS/CSS/images/etc. from the React build folder.
+// This does NOT serve index.html for arbitrary routes - the
+// catch-all below (after all API/SEO routes) handles that.
+
+app.use(
+  express.static(
+    path.join(__dirname, '..', STATIC_DIR)
+  )
+);
+
+// ============================================================
 // MONGODB
 // ============================================================
 
@@ -2236,6 +2249,39 @@ app.options('/api/proxy', (req, res) => {
   });
 
   return res.sendStatus(204);
+});
+
+// ============================================================
+// FRONTEND CATCH-ALL
+// ============================================================
+// Any GET request that didn't match an API route, an SEO
+// route, or a static asset above falls through to here and
+// gets the React app's index.html. This is what makes "/"
+// (and client-side routes like "/watch/some-channel") work.
+// Must be registered AFTER every other route.
+
+app.get('*', (req, res) => {
+  const indexPath = path.join(
+    __dirname,
+    '..',
+    STATIC_DIR,
+    'index.html'
+  );
+
+  return res.sendFile(indexPath, (error) => {
+    if (error) {
+      console.error(
+        'Failed to send index.html:',
+        error.message
+      );
+
+      if (!res.headersSent) {
+        res.status(500).send(
+          'Unable to load application'
+        );
+      }
+    }
+  });
 });
 
 // ============================================================
