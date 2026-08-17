@@ -21,3 +21,19 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+*.backup
+*.backup.js
+index.before*.js
+*.docx
+*.pdf
+components.zip
+channels-test.json
+*.backup
+*.backup.js
+index.before*.js
+*.docx
+*.pdf
+components.zip
+channels-test.json
+Marketing Strategies.txt
+troubleshooting.txt
