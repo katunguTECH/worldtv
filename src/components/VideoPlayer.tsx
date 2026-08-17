@@ -110,7 +110,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
     const player = videojs(videoRef.current, {
       controls: true,
       autoplay: true,
-      muted: true,
+      muted: false, // CHANGED: from true to false - volume is now on by default
       preload: 'auto',
       fluid: true,
       responsive: true,
@@ -476,7 +476,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
       if (videoId) {
         setIframeUrl(
-          `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&mute=1&rel=0`
+          `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&mute=0&rel=0` // CHANGED: from mute=1 to mute=0
         );
       } else {
         setIframeUrl(streamUrl);
