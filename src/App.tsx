@@ -440,6 +440,23 @@ function App() {
 
   /*
   ============================================================
+  EMAIL GATE — blocks the whole app for unconfirmed visitors.
+  Placed after every hook above so hook order stays consistent
+  across renders; placed before the loading screen so visitors
+  are asked immediately, without waiting on channel data.
+  ============================================================
+  */
+
+  if (!hasEmail) {
+    return (
+      <EmailGate
+        onSubmit={() => setHasEmail(true)}
+      />
+    );
+  }
+
+  /*
+  ============================================================
   LOADING SCREEN
   ============================================================
   */
@@ -685,26 +702,14 @@ function App() {
 
             <div className="p-4 relative">
 
-              {!hasEmail && (
-                <EmailGate
-                  onSubmit={() =>
-                    setHasEmail(
-                      true
-                    )
-                  }
-                />
-              )}
-
-              {hasEmail && (
-                <VideoPlayer
-                  streamUrl={
-                    selectedChannel.streamUrl
-                  }
-                  channelName={
-                    selectedChannel.name
-                  }
-                />
-              )}
+              <VideoPlayer
+                streamUrl={
+                  selectedChannel.streamUrl
+                }
+                channelName={
+                  selectedChannel.name
+                }
+              />
 
             </div>
 
