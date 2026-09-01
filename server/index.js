@@ -131,7 +131,7 @@ initDb();
 const CONFIRMATION_EXPIRY_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
 
 app.post('/api/users', signupLimiter, async (req, res) => {
-  const { email, website } = req.body || {};
+  const { email, website, phone } = req.body || {};
 
   // Honeypot: "website" is hidden from real users via CSS. Bots that
   // auto-fill every field will populate it. Pretend success, save nothing.
@@ -171,17 +171,26 @@ app.post('/api/users', signupLimiter, async (req, res) => {
     const token = crypto.randomBytes(32).toString('hex');
     const confirmationExpires = new Date(Date.now() + CONFIRMATION_EXPIRY_MS);
 
+    // Phone/WhatsApp is optional and unverified — just a lead field.
+    // Only set it if the user actually provided one this time, so a blank
+    // resend doesn't wipe out a phone number saved on an earlier attempt.
+    const normalizedPhone = String(phone || '').trim();
+    const setFields = {
+      email: normalizedEmail,
+      lastSeen: new Date(),
+      verified: false,
+      confirmationToken: token,
+      confirmationExpires,
+      signupIp: req.ip,
+    };
+    if (normalizedPhone) {
+      setFields.phone = normalizedPhone;
+    }
+
     await usersCollection.updateOne(
       { email: normalizedEmail },
       {
-        $set: {
-          email: normalizedEmail,
-          lastSeen: new Date(),
-          verified: false,
-          confirmationToken: token,
-          confirmationExpires,
-          signupIp: req.ip,
-        },
+        $set: setFields,
         $setOnInsert: {
           firstSeen: new Date(),
         },
@@ -519,6 +528,7 @@ app.get(
           week: usersWeek,
           list: allUsers.map((u) => ({
             email: u.email,
+            phone: u.phone || null,
             verified: !!u.verified,
             firstSeen: u.firstSeen,
             lastSeen: u.lastSeen,
