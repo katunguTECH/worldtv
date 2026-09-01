@@ -5,6 +5,8 @@ import React, { useEffect, useState } from 'react';
 const CONFIRMED_KEY = 'worldtv_email_confirmed';
 const PENDING_KEY = 'worldtv_email_pending'; // holds the email while we wait for confirmation
 
+const WHATSAPP_CHANNEL_LINK = 'https://whatsapp.com/channel/0029Vb8uRbRJf05g7kqSzf1Y';
+
 type GateStatus = 'checking' | 'hidden' | 'collect' | 'pending' | 'error';
 
 const EmailGateModal: React.FC = () => {
@@ -115,6 +117,25 @@ const EmailGateModal: React.FC = () => {
             >
               {submitting ? 'Sending...' : 'Send confirmation link'}
             </button>
+
+            {/* Secondary opt-in: some visitors trust WhatsApp more than
+                handing over an email, or just want a faster path. Joining
+                the channel does NOT unlock the gate (email confirmation
+                is still what filters bots) — it's an additional lead
+                channel offered alongside the email ask. */}
+            <div className="mt-4 pt-4 border-t border-gray-700 text-center">
+              <p className="text-gray-400 text-xs mb-2">
+                Prefer WhatsApp? Join our channel for updates too:
+              </p>
+              <a
+                href={WHATSAPP_CHANNEL_LINK}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 text-green-400 hover:text-green-300 text-sm font-medium"
+              >
+                Join WorldTV on WhatsApp →
+              </a>
+            </div>
           </form>
         )}
 
@@ -124,6 +145,25 @@ const EmailGateModal: React.FC = () => {
               We sent a confirmation link to <span className="text-white">{email}</span>.
               Click it to unlock the site — you won't need to do this again.
             </p>
+
+            {/* While they wait for the email (which may take a minute or
+                land in spam), give them a second way to stay connected
+                right now. */}
+            <div className="bg-gray-700/50 rounded p-3 mb-3">
+              <p className="text-gray-300 text-xs mb-2">
+                While you wait, join our WhatsApp channel for instant
+                updates on new content:
+              </p>
+              <a
+                href={WHATSAPP_CHANNEL_LINK}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white text-sm px-3 py-1.5 rounded font-medium"
+              >
+                Join on WhatsApp →
+              </a>
+            </div>
+
             <button
               onClick={() => {
                 localStorage.removeItem(PENDING_KEY);
