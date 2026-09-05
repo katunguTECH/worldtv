@@ -1,5 +1,5 @@
 import { Channel } from '../types/channel.types';
-import { fetchIPTVChannels, forceRefreshChannels } from './iptvService';
+import { fetchIPTVChannels, forceRefreshChannels, fetchLegalIptvOrgChannels } from './iptvService';
 
 let allChannels: Channel[] = [];
 let countryIndex: Map<string, Channel[]> = new Map();
@@ -31,14 +31,29 @@ function buildIndexes(channels: Channel[]) {
   categories = ['All', ...Array.from(categorySet).sort()];
 }
 
+// Dedupe iptv-org channels against our own backend list by name+country,
+// so a channel we already carry (possibly from a licensed source) isn't
+// duplicated by a same-named entry from the iptv-org list.
+function mergeChannels(primary: Channel[], supplemental: Channel[]): Channel[] {
+  const seen = new Set(primary.map(c => `${c.name}|${c.country}`.toLowerCase()));
+  const extra = supplemental.filter(c => !seen.has(`${c.name}|${c.country}`.toLowerCase()));
+  return [...primary, ...extra];
+}
+
 export const initializeChannels = async (): Promise<void> => {
-  const channels = await fetchIPTVChannels();
-  buildIndexes(channels);
+  const [backendChannels, iptvOrgChannels] = await Promise.all([
+    fetchIPTVChannels(),
+    fetchLegalIptvOrgChannels(),
+  ]);
+  buildIndexes(mergeChannels(backendChannels, iptvOrgChannels));
 };
 
 export const refreshChannels = async (): Promise<void> => {
-  const channels = await forceRefreshChannels();
-  buildIndexes(channels);
+  const [backendChannels, iptvOrgChannels] = await Promise.all([
+    forceRefreshChannels(),
+    fetchLegalIptvOrgChannels(),
+  ]);
+  buildIndexes(mergeChannels(backendChannels, iptvOrgChannels));
 };
 
 export const getCountries = (): string[] => countries;
