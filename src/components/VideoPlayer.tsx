@@ -5,22 +5,261 @@ import 'video.js/dist/video-js.css';
 interface VideoPlayerProps {
   streamUrl: string;
   channelName: string;
+  /*
+   * Called whenever the underlying <video> enters/leaves
+   * Picture-in-Picture. The App shell uses this to know whether
+   * it's safe to unmount the player when the "modal" is closed —
+   * unmounting while PiP is active would kill the floating window.
+   */
+  onPipChange?: (isInPip: boolean) => void;
 }
 
-const VideoPlayer: React.FC<VideoPlayerProps> = ({
-  streamUrl,
-  channelName,
-}) => {
+export interface VideoPlayerHandle {
+  /*
+   * Manually request Picture-in-Picture. Exposed so a "Watch in
+   * background" button elsewhere in the UI can trigger the same
+   * floating window the control-bar toggle does.
+   */
+  requestPip: () => Promise<void>;
+}
+
+/*
+ * ================================================================
+ * CASTING SUPPORT (Chromecast + AirPlay)
+ * ================================================================
+ *
+ * Both of these ride on standard browser APIs, so no external SDK
+ * or Chromecast receiver app registration is required:
+ *
+ * - Chromecast / Google Cast: the W3C Remote Playback API
+ *   (`videoEl.remote.prompt()`), supported by Chrome/Edge on
+ *   desktop + Android. This is the same mechanism that powers the
+ *   native cast icon Chrome sometimes shows on <video> elements.
+ *
+ * - AirPlay: Safari's `webkitShowPlaybackTargetPicker()`,
+ *   supported on macOS/iOS Safari.
+ *
+ * A device only shows up in either picker if it's actually on the
+ * same network, so there's nothing else to configure server-side.
+ * ================================================================
+ */
+
+const supportsRemotePlayback =
+  typeof window !== 'undefined' &&
+  typeof HTMLMediaElement !== 'undefined' &&
+  'remote' in HTMLMediaElement.prototype;
+
+const supportsAirPlay =
+  typeof window !== 'undefined' &&
+  typeof (window as any).WebKitPlaybackTargetAvailabilityEvent !==
+    'undefined';
+
+let castButtonsRegistered = false;
+
+function registerCastButtons() {
+  if (castButtonsRegistered) {
+    return;
+  }
+
+  castButtonsRegistered = true;
+
+  const Button = videojs.getComponent('Button');
+
+  class CastButton extends (Button as any) {
+    constructor(player: any, options: any) {
+      super(player, options);
+
+      this.controlText('Cast to TV');
+
+      if (!supportsRemotePlayback) {
+        this.hide();
+      }
+    }
+
+    createEl() {
+      const el = (videojs.dom as any).createEl('button', {
+        className:
+          'vjs-cast-button vjs-control vjs-button',
+      });
+
+      el.innerHTML =
+        '<span class="vjs-icon-placeholder" aria-hidden="true">' +
+        '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">' +
+        '<path d="M1 18v3h3c0-1.66-1.34-3-3-3zm0-4v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7zm18-7H5v1.63c3.96 1.28 7.09 4.41 8.37 8.37H19V7zM1 10v2c4.97 0 9 4.03 9 9h2c0-6.08-4.93-11-11-11zm20-7H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/>' +
+        '</svg></span>' +
+        '<span class="vjs-control-text">Cast to TV</span>';
+
+      return el;
+    }
+
+    handleClick() {
+      const videoEl = this.player().tech().el() as any;
+
+      if (videoEl && videoEl.remote && videoEl.remote.prompt) {
+        videoEl.remote.prompt().catch((error: any) => {
+          console.warn(
+            '[WorldTV] Cast prompt failed or was dismissed:',
+            error
+          );
+        });
+      }
+    }
+  }
+
+  class AirPlayButton extends (Button as any) {
+    constructor(player: any, options: any) {
+      super(player, options);
+
+      this.controlText('AirPlay');
+
+      if (!supportsAirPlay) {
+        this.hide();
+      }
+    }
+
+    createEl() {
+      const el = (videojs.dom as any).createEl('button', {
+        className:
+          'vjs-airplay-button vjs-control vjs-button',
+      });
+
+      el.innerHTML =
+        '<span class="vjs-icon-placeholder" aria-hidden="true">' +
+        '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">' +
+        '<path d="M6 22h12l-6-6z"/>' +
+        '<path d="M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h4v-2H3V5h18v14h-4v2h4c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/>' +
+        '</svg></span>' +
+        '<span class="vjs-control-text">AirPlay</span>';
+
+      return el;
+    }
+
+    handleClick() {
+      const videoEl = this.player().tech().el() as any;
+
+      if (videoEl && videoEl.webkitShowPlaybackTargetPicker) {
+        videoEl.webkitShowPlaybackTargetPicker();
+      }
+    }
+  }
+
+  videojs.registerComponent('CastButton', CastButton);
+  videojs.registerComponent('AirPlayButton', AirPlayButton);
+}
+
+registerCastButtons();
+
+const VideoPlayer = React.forwardRef<
+  VideoPlayerHandle,
+  VideoPlayerProps
+>(({ streamUrl, channelName, onPipChange }, ref) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerRef = useRef<any>(null);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retryCountRef = useRef(0);
+  const onPipChangeRef = useRef(onPipChange);
+
+  useEffect(() => {
+    onPipChangeRef.current = onPipChange;
+  }, [onPipChange]);
+
+  React.useImperativeHandle(ref, () => ({
+    requestPip: async () => {
+      const videoEl = playerRef.current?.tech?.()?.el?.() as
+        | HTMLVideoElement
+        | undefined;
+
+      if (!videoEl) {
+        return;
+      }
+
+      if (document.pictureInPictureElement) {
+        return;
+      }
+
+      try {
+        await videoEl.requestPictureInPicture();
+      } catch (error) {
+        console.warn(
+          '[WorldTV] requestPictureInPicture failed:',
+          error
+        );
+      }
+    },
+  }));
 
   const [isWebsite, setIsWebsite] = useState(false);
   const [iframeUrl, setIframeUrl] = useState('');
   const [loadError, setLoadError] = useState<string | null>(null);
   const [iframeFailed, setIframeFailed] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
+
+  const iframeWrapperRef = useRef<HTMLDivElement>(null);
+  const iframeOriginalParentRef = useRef<Node | null>(null);
+  const iframeOriginalNextSiblingRef = useRef<Node | null>(null);
+
+  /*
+   * ----------------------------------------------------------
+   * Pop the YouTube/website iframe out into an always-on-top
+   * floating window (Chrome/Edge desktop only — Document
+   * Picture-in-Picture API). This is the closest desktop
+   * equivalent of the mobile "keep watching while you scroll"
+   * behavior for embedded, cross-origin players that don't
+   * expose their own <video> element for native PiP.
+   * ----------------------------------------------------------
+   */
+  const popOutIframe = async () => {
+    const wrapper = iframeWrapperRef.current;
+    const docPip = (window as any).documentPictureInPicture;
+
+    if (!wrapper || !docPip) {
+      return;
+    }
+
+    try {
+      const pipWindow = await docPip.requestWindow({
+        width: 480,
+        height: 270,
+      });
+
+      // Copy over styles so the floating window isn't unstyled.
+      [...document.styleSheets].forEach((sheet) => {
+        try {
+          const css = [...sheet.cssRules]
+            .map(rule => rule.cssText)
+            .join('');
+
+          const style = pipWindow.document.createElement('style');
+          style.textContent = css;
+          pipWindow.document.head.appendChild(style);
+        } catch (error) {
+          // Cross-origin stylesheets can't be read; skip them.
+        }
+      });
+
+      pipWindow.document.body.style.margin = '0';
+      pipWindow.document.body.style.background = '#000';
+
+      iframeOriginalParentRef.current = wrapper.parentNode;
+      iframeOriginalNextSiblingRef.current = wrapper.nextSibling;
+
+      pipWindow.document.body.append(wrapper);
+
+      pipWindow.addEventListener('pagehide', () => {
+        if (iframeOriginalParentRef.current) {
+          iframeOriginalParentRef.current.insertBefore(
+            wrapper,
+            iframeOriginalNextSiblingRef.current
+          );
+        }
+      });
+    } catch (error) {
+      console.warn(
+        '[WorldTV] Document Picture-in-Picture failed:',
+        error
+      );
+    }
+  };
 
   /*
    * ----------------------------------------------------------
@@ -162,9 +401,61 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
           'seekToLive',
           'remainingTimeDisplay',
           'playbackRateMenuButton',
+          'castButton',
+          'airPlayButton',
+          'pictureInPictureToggle',
           'fullscreenToggle',
         ],
       },
+    });
+
+    /*
+     * --------------------------------------------------------
+     * Native Picture-in-Picture (mobile "floating over other
+     * apps" behavior, same as YouTube's mini player).
+     *
+     * The `pictureInPictureToggle` control above already wires
+     * this up for the video.js UI. We additionally:
+     *
+     *  - Set Media Session metadata so the floating PiP window
+     *    (and lock screen / notification tray) shows the
+     *    channel name instead of a blank title.
+     *  - Track PiP enter/leave so the parent App can decide
+     *    whether it's safe to unmount the player when the user
+     *    dismisses the modal (see onPipChange prop).
+     * --------------------------------------------------------
+     */
+
+    player.ready(() => {
+      const videoEl = player.tech().el() as HTMLVideoElement;
+
+      if (
+        'mediaSession' in navigator &&
+        (navigator as any).mediaSession
+      ) {
+        try {
+          (navigator as any).mediaSession.metadata =
+            new (window as any).MediaMetadata({
+              title: channelName,
+              artist: 'WorldTV',
+            });
+        } catch (error) {
+          console.warn(
+            '[WorldTV] Media Session metadata failed:',
+            error
+          );
+        }
+      }
+
+      if (videoEl) {
+        videoEl.addEventListener('enterpictureinpicture', () => {
+          onPipChangeRef.current?.(true);
+        });
+
+        videoEl.addEventListener('leavepictureinpicture', () => {
+          onPipChangeRef.current?.(false);
+        });
+      }
     });
 
     playerRef.current = player;
@@ -567,6 +858,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
     return (
       <div
+        ref={iframeWrapperRef}
         className="relative bg-black rounded-lg overflow-hidden"
         style={{
           paddingBottom: '56.25%',
@@ -587,7 +879,18 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
           onError={() => setIframeFailed(true)}
         />
 
-        <div className="absolute bottom-4 right-4 z-10">
+        <div className="absolute bottom-4 right-4 z-10 flex gap-2">
+          {typeof window !== 'undefined' &&
+            'documentPictureInPicture' in window && (
+              <button
+                onClick={popOutIframe}
+                className="bg-gray-800/90 hover:bg-gray-700 text-white px-3 py-1.5 rounded text-sm transition flex items-center gap-1"
+                title="Float this player in a window on top of everything else"
+              >
+                Float window ⧉
+              </button>
+            )}
+
           <button
             onClick={() =>
               window.open(
@@ -682,6 +985,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
       )}
     </div>
   );
-};
+});
+
+VideoPlayer.displayName = 'VideoPlayer';
 
 export default VideoPlayer;

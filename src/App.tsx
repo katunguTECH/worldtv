@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useRef, useState } from 'react';
 import { Channel } from './types/channel.types';
 import {
   initializeChannels,
@@ -12,7 +12,9 @@ import {
 import SearchBar from './components/SearchBar';
 import Sidebar from './components/Sidebar';
 import ChannelGrid from './components/ChannelGrid';
-import VideoPlayer from './components/VideoPlayer';
+import VideoPlayer, {
+  VideoPlayerHandle,
+} from './components/VideoPlayer';
 import EmailGate from './components/EmailGate';
 import WhatsAppButton from './components/WhatsAppButton';
 
@@ -123,6 +125,23 @@ function App() {
 
   const [selectedChannel, setSelectedChannel] =
     useState<Channel | null>(null);
+
+  /*
+    The big modal ("now playing" overlay) and the mounted
+    <VideoPlayer> are decoupled on purpose. Closing the modal
+    normally unmounts the player and stops the stream — but if
+    the viewer has put the video into Picture-in-Picture (the
+    floating window that stays on top of other apps, same as
+    YouTube's mini player), unmounting would kill that floating
+    window. So we only unmount when it's actually safe to.
+  */
+  const [isPlayerModalOpen, setIsPlayerModalOpen] =
+    useState(false);
+
+  const [isPip, setIsPip] = useState(false);
+
+  const videoPlayerRef =
+    useRef<VideoPlayerHandle>(null);
 
   const [currentChannels, setCurrentChannels] =
     useState<Channel[]>([]);
@@ -330,6 +349,8 @@ function App() {
     setSelectedChannel(
       channel
     );
+
+    setIsPlayerModalOpen(true);
   };
 
   /*
@@ -356,6 +377,8 @@ function App() {
         randomIndex
       ]
     );
+
+    setIsPlayerModalOpen(true);
   };
 
   /*
@@ -365,9 +388,38 @@ function App() {
   */
 
   const handleCloseModal = () => {
-    setSelectedChannel(
-      null
-    );
+    setIsPlayerModalOpen(false);
+
+    /*
+      If the viewer has floated the video into Picture-in-Picture,
+      leave `selectedChannel` set so <VideoPlayer> stays mounted
+      and the floating window keeps playing while they browse the
+      channel grid underneath. It gets fully unmounted either when
+      they pick a new channel, or when they exit PiP (see
+      handlePipChange below).
+    */
+    if (!isPip) {
+      setSelectedChannel(null);
+    }
+  };
+
+  /*
+  ============================================================
+  PICTURE-IN-PICTURE STATE
+  ============================================================
+  */
+
+  const handlePipChange = (nowInPip: boolean) => {
+    setIsPip(nowInPip);
+
+    /*
+      The viewer manually closed the floating PiP window (rather
+      than the in-app modal) while the modal was already hidden —
+      nothing left referencing the stream, so tear it down.
+    */
+    if (!nowInPip && !isPlayerModalOpen) {
+      setSelectedChannel(null);
+    }
   };
 
   /*
@@ -614,7 +666,7 @@ function App() {
 
       {/* PLAYER MODAL */}
 
-      {selectedChannel && (
+      {selectedChannel && isPlayerModalOpen && (
 
         <div
           className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4"
@@ -687,14 +739,31 @@ function App() {
 
               </div>
 
-              <button
-                onClick={
-                  handleCloseModal
-                }
-                className="text-gray-400 hover:text-white text-2xl leading-none ml-4"
-              >
-                Close
-              </button>
+              <div className="flex items-center gap-3 ml-4">
+
+                {typeof document !== 'undefined' &&
+                  document.pictureInPictureEnabled && (
+                  <button
+                    onClick={() =>
+                      videoPlayerRef.current?.requestPip()
+                    }
+                    className="text-gray-300 hover:text-white text-sm border border-gray-600 hover:border-gray-500 rounded px-3 py-1.5 transition"
+                    title="Keep watching in a floating window while you browse"
+                  >
+                    Watch in background ⧉
+                  </button>
+                )}
+
+                <button
+                  onClick={
+                    handleCloseModal
+                  }
+                  className="text-gray-400 hover:text-white text-2xl leading-none"
+                >
+                  Close
+                </button>
+
+              </div>
 
             </div>
 
@@ -703,11 +772,15 @@ function App() {
             <div className="p-4 relative">
 
               <VideoPlayer
+                ref={videoPlayerRef}
                 streamUrl={
                   selectedChannel.streamUrl
                 }
                 channelName={
                   selectedChannel.name
+                }
+                onPipChange={
+                  handlePipChange
                 }
               />
 
@@ -752,6 +825,72 @@ function App() {
           </div>
 
         </div>
+
+      )}
+
+      {/*
+        PIP-ONLY MOUNT
+        ============================================================
+        The modal is closed but the viewer floated the video into
+        Picture-in-Picture before closing it, so the stream is still
+        live in a floating OS-level window. We keep <VideoPlayer>
+        mounted (off-screen, effectively invisible) purely so that
+        floating window keeps receiving frames — removing the
+        element from the DOM would close it. A small pill lets them
+        jump back into the full modal or stop the stream entirely.
+      */}
+
+      {selectedChannel && !isPlayerModalOpen && isPip && (
+
+        <>
+          <div
+            className="fixed opacity-0 pointer-events-none w-1 h-1 overflow-hidden"
+            aria-hidden="true"
+          >
+            <VideoPlayer
+              ref={videoPlayerRef}
+              streamUrl={
+                selectedChannel.streamUrl
+              }
+              channelName={
+                selectedChannel.name
+              }
+              onPipChange={
+                handlePipChange
+              }
+            />
+          </div>
+
+          <div className="fixed bottom-4 right-4 z-50 bg-gray-800 text-white text-sm rounded-lg shadow-lg px-4 py-3 flex items-center gap-3">
+            <span>
+              Floating: {selectedChannel.name}
+            </span>
+
+            <button
+              onClick={() =>
+                setIsPlayerModalOpen(true)
+              }
+              className="text-blue-400 hover:text-blue-300 font-medium"
+            >
+              Reopen
+            </button>
+
+            <button
+              onClick={() => {
+                if (document.pictureInPictureElement) {
+                  document
+                    .exitPictureInPicture()
+                    .catch(() => {});
+                }
+
+                setSelectedChannel(null);
+              }}
+              className="text-gray-400 hover:text-white"
+            >
+              Stop
+            </button>
+          </div>
+        </>
 
       )}
 
