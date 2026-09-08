@@ -143,8 +143,8 @@ function registerCastButtons() {
     }
   }
 
-  videojs.registerComponent('CastButton', CastButton);
-  videojs.registerComponent('AirPlayButton', AirPlayButton);
+  videojs.registerComponent('CastButton', CastButton as any);
+  videojs.registerComponent('AirPlayButton', AirPlayButton as any);
 }
 
 registerCastButtons();
