@@ -223,9 +223,9 @@ const VideoPlayer = React.forwardRef<
       });
 
       // Copy over styles so the floating window isn't unstyled.
-      [...document.styleSheets].forEach((sheet) => {
+      Array.from(document.styleSheets).forEach((sheet) => {
         try {
-          const css = [...sheet.cssRules]
+          const css = Array.from(sheet.cssRules)
             .map(rule => rule.cssText)
             .join('');
 
