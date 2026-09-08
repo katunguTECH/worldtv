@@ -165,9 +165,7 @@ const VideoPlayer = React.forwardRef<
 
   React.useImperativeHandle(ref, () => ({
     requestPip: async () => {
-      const videoEl = playerRef.current?.tech?.()?.el?.() as
-        | HTMLVideoElement
-        | undefined;
+      const videoEl = videoRef.current;
 
       if (!videoEl) {
         return;
@@ -426,35 +424,50 @@ const VideoPlayer = React.forwardRef<
      * --------------------------------------------------------
      */
 
+    /*
+     * IMPORTANT: this runs in its own player.ready() callback,
+     * fully isolated (try/catch) from the source-loading logic
+     * below. player.tech() is unsafe to call this early (before
+     * a source is loaded, video.js may not have an active tech
+     * yet, and calling it can throw) — we use the <video> DOM
+     * node we already hold a ref to instead, which always exists.
+     */
     player.ready(() => {
-      const videoEl = player.tech().el() as HTMLVideoElement;
+      try {
+        const videoEl = videoRef.current;
 
-      if (
-        'mediaSession' in navigator &&
-        (navigator as any).mediaSession
-      ) {
-        try {
-          (navigator as any).mediaSession.metadata =
-            new (window as any).MediaMetadata({
-              title: channelName,
-              artist: 'WorldTV',
-            });
-        } catch (error) {
-          console.warn(
-            '[WorldTV] Media Session metadata failed:',
-            error
-          );
+        if (
+          'mediaSession' in navigator &&
+          (navigator as any).mediaSession
+        ) {
+          try {
+            (navigator as any).mediaSession.metadata =
+              new (window as any).MediaMetadata({
+                title: channelName,
+                artist: 'WorldTV',
+              });
+          } catch (error) {
+            console.warn(
+              '[WorldTV] Media Session metadata failed:',
+              error
+            );
+          }
         }
-      }
 
-      if (videoEl) {
-        videoEl.addEventListener('enterpictureinpicture', () => {
-          onPipChangeRef.current?.(true);
-        });
+        if (videoEl) {
+          videoEl.addEventListener('enterpictureinpicture', () => {
+            onPipChangeRef.current?.(true);
+          });
 
-        videoEl.addEventListener('leavepictureinpicture', () => {
-          onPipChangeRef.current?.(false);
-        });
+          videoEl.addEventListener('leavepictureinpicture', () => {
+            onPipChangeRef.current?.(false);
+          });
+        }
+      } catch (error) {
+        console.warn(
+          '[WorldTV] Post-ready setup (media session / PiP listeners) failed:',
+          error
+        );
       }
     });
 
