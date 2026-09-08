@@ -67,36 +67,47 @@ function registerCastButtons() {
 
   class CastButton extends (Button as any) {
     constructor(player: any, options: any) {
-      super(player, options);
+      super(
+        player,
+        Object.assign({}, options, { controlText: 'Cast to TV' })
+      );
 
-      this.controlText('Cast to TV');
+      this.addClass('vjs-cast-button');
 
       if (!supportsRemotePlayback) {
         this.hide();
       }
     }
 
-    createEl() {
-      const el = (videojs.dom as any).createEl('button', {
-        className:
-          'vjs-cast-button vjs-control vjs-button',
-      });
+    /*
+     * Let video.js build its normal button markup (this is what
+     * sets up controlTextEl_, which the base Button class relies
+     * on internally — replacing the markup wholesale, like an
+     * earlier version of this code did, breaks that and crashes
+     * the player). We only reach in and swap the icon glyph.
+     */
+    createEl(tag: any, props: any, attributes: any) {
+      const el = super.createEl(tag, props, attributes);
 
-      el.innerHTML =
-        '<span class="vjs-icon-placeholder" aria-hidden="true">' +
-        '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">' +
-        '<path d="M1 18v3h3c0-1.66-1.34-3-3-3zm0-4v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7zm18-7H5v1.63c3.96 1.28 7.09 4.41 8.37 8.37H19V7zM1 10v2c4.97 0 9 4.03 9 9h2c0-6.08-4.93-11-11-11zm20-7H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/>' +
-        '</svg></span>' +
-        '<span class="vjs-control-text">Cast to TV</span>';
+      const iconPlaceholder = el.querySelector(
+        '.vjs-icon-placeholder'
+      );
+
+      if (iconPlaceholder) {
+        iconPlaceholder.innerHTML =
+          '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">' +
+          '<path d="M1 18v3h3c0-1.66-1.34-3-3-3zm0-4v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7zm18-7H5v1.63c3.96 1.28 7.09 4.41 8.37 8.37H19V7zM1 10v2c4.97 0 9 4.03 9 9h2c0-6.08-4.93-11-11-11zm20-7H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/>' +
+          '</svg>';
+      }
 
       return el;
     }
 
     handleClick() {
-      const videoEl = this.player().tech().el() as any;
+      const videoEl = this.player().tech().el();
 
-      if (videoEl && videoEl.remote && videoEl.remote.prompt) {
-        videoEl.remote.prompt().catch((error: any) => {
+      if (videoEl && (videoEl as any).remote && (videoEl as any).remote.prompt) {
+        (videoEl as any).remote.prompt().catch((error: any) => {
           console.warn(
             '[WorldTV] Cast prompt failed or was dismissed:',
             error
@@ -108,28 +119,32 @@ function registerCastButtons() {
 
   class AirPlayButton extends (Button as any) {
     constructor(player: any, options: any) {
-      super(player, options);
+      super(
+        player,
+        Object.assign({}, options, { controlText: 'AirPlay' })
+      );
 
-      this.controlText('AirPlay');
+      this.addClass('vjs-airplay-button');
 
       if (!supportsAirPlay) {
         this.hide();
       }
     }
 
-    createEl() {
-      const el = (videojs.dom as any).createEl('button', {
-        className:
-          'vjs-airplay-button vjs-control vjs-button',
-      });
+    createEl(tag: any, props: any, attributes: any) {
+      const el = super.createEl(tag, props, attributes);
 
-      el.innerHTML =
-        '<span class="vjs-icon-placeholder" aria-hidden="true">' +
-        '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">' +
-        '<path d="M6 22h12l-6-6z"/>' +
-        '<path d="M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h4v-2H3V5h18v14h-4v2h4c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/>' +
-        '</svg></span>' +
-        '<span class="vjs-control-text">AirPlay</span>';
+      const iconPlaceholder = el.querySelector(
+        '.vjs-icon-placeholder'
+      );
+
+      if (iconPlaceholder) {
+        iconPlaceholder.innerHTML =
+          '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">' +
+          '<path d="M6 22h12l-6-6z"/>' +
+          '<path d="M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h4v-2H3V5h18v14h-4v2h4c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/>' +
+          '</svg>';
+      }
 
       return el;
     }
@@ -142,6 +157,7 @@ function registerCastButtons() {
       }
     }
   }
+
 
   videojs.registerComponent('CastButton', CastButton as any);
   videojs.registerComponent('AirPlayButton', AirPlayButton as any);
