@@ -72,7 +72,7 @@ const EmailGate: React.FC<EmailGateProps> = ({ onSubmit }) => {
       const res = await fetch('/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, website, phone }),
+        body: JSON.stringify({ email, website, phone, source: 'timed_45s' }),
       });
       const data = await res.json();
 
@@ -133,9 +133,9 @@ const EmailGate: React.FC<EmailGateProps> = ({ onSubmit }) => {
     <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[100]">
       {status === 'form' && (
         <form onSubmit={handleSubmit} className="bg-gray-800 p-6 rounded-lg max-w-sm w-full mx-4">
-          <h3 className="text-white text-lg font-semibold mb-2">Enter your email or click in the whatsapp link to continue</h3>
+          <h3 className="text-white text-lg font-semibold mb-2">You've been browsing a while — quick check to keep going</h3>
           <p className="text-gray-400 text-sm mb-4">
-            To keep WorldTV free of bots and fake accounts, we ask new visitors to confirm their email or whatsapp once. Click the link we send you and you're set — no spam, and you won't be asked again.
+            Confirm your email once and you're set for good — no spam, and you won't be asked again. Prefer WhatsApp? Use the link below instead.
           </p>
           <input
             type="email"

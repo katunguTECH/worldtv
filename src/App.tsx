@@ -154,6 +154,57 @@ function App() {
         )
     );
 
+  /*
+    Timed email gate — instead of blocking the whole app on first
+    render, we let people browse freely (grid, search, and playing
+    channels all work with no gate) for SESSION_THRESHOLD_MINUTES of
+    *wall-clock time since they first landed on the site*. Once that
+    elapses, showEmailGate flips true and stays true — rendered at the
+    root of the app (see below), so it blocks all further browsing,
+    not just the video — until they confirm an email (or hasEmail was
+    already true, in which case the timer never even starts).
+
+    The session start time is stored in localStorage so a reload (or
+    coming back an hour later without confirming) doesn't reset the
+    clock — only actually confirming an email clears the gate for
+    good.
+  */
+  const SESSION_THRESHOLD_MINUTES = 15;
+  const SESSION_START_KEY = 'worldtv_session_start';
+  const [showEmailGate, setShowEmailGate] = useState(false);
+  const gateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (hasEmail) {
+      return; // already confirmed — never start the timer at all
+    }
+
+    let sessionStart = Number(localStorage.getItem(SESSION_START_KEY)) || 0;
+    if (!sessionStart) {
+      sessionStart = Date.now();
+      localStorage.setItem(SESSION_START_KEY, String(sessionStart));
+    }
+
+    const thresholdMs = SESSION_THRESHOLD_MINUTES * 60 * 1000;
+    const remaining = thresholdMs - (Date.now() - sessionStart);
+
+    if (remaining <= 0) {
+      setShowEmailGate(true);
+      return;
+    }
+
+    gateTimerRef.current = setTimeout(() => {
+      setShowEmailGate(true);
+    }, remaining);
+
+    return () => {
+      if (gateTimerRef.current) {
+        clearTimeout(gateTimerRef.current);
+        gateTimerRef.current = null;
+      }
+    };
+  }, [hasEmail]);
+
   const countries = getCountries();
   const categories = getCategories();
 
@@ -351,6 +402,7 @@ function App() {
     );
 
     setIsPlayerModalOpen(true);
+    setShowEmailGate(false);
   };
 
   /*
@@ -379,6 +431,7 @@ function App() {
     );
 
     setIsPlayerModalOpen(true);
+    setShowEmailGate(false);
   };
 
   /*
@@ -489,23 +542,6 @@ function App() {
       window.location.reload();
     }
   };
-
-  /*
-  ============================================================
-  EMAIL GATE — blocks the whole app for unconfirmed visitors.
-  Placed after every hook above so hook order stays consistent
-  across renders; placed before the loading screen so visitors
-  are asked immediately, without waiting on channel data.
-  ============================================================
-  */
-
-  if (!hasEmail) {
-    return (
-      <EmailGate
-        onSubmit={() => setHasEmail(true)}
-      />
-    );
-  }
 
   /*
   ============================================================
@@ -897,6 +933,21 @@ function App() {
       {/* WHATSAPP */}
 
       <WhatsAppButton />
+
+      {/*
+        Full-app timed email gate — renders on top of everything
+        (sidebar, grid, search, player) once the free-browsing window
+        has elapsed for a visitor who hasn't confirmed an email yet.
+      */}
+      {showEmailGate && !hasEmail && (
+        <EmailGate
+          onSubmit={() => {
+            setHasEmail(true);
+            setShowEmailGate(false);
+            localStorage.removeItem(SESSION_START_KEY);
+          }}
+        />
+      )}
 
     </div>
   );

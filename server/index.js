@@ -1,13 +1,8 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
-const crypto = require('crypto');
 const { MongoClient } = require('mongodb');
 const { Agent, setGlobalDispatcher } = require('undici');
-const rateLimit = require('express-rate-limit');
-
-const { validateEmailAddress } = require('./emailValidation');
-const { sendConfirmationEmail } = require('./mailer');
 
 const app = express();
 
@@ -49,25 +44,6 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json());
-
-// ============================================================
-// RATE LIMITING
-// ============================================================
-
-const signupLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 5,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many attempts from this address. Please try again later.' },
-});
-
-const confirmLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 20,
-  standardHeaders: true,
-  legacyHeaders: false,
-});
 
 // ============================================================
 // STATIC FRONTEND ASSETS
@@ -128,154 +104,55 @@ initDb();
 // USERS - EMAIL CAPTURE
 // ============================================================
 
-const CONFIRMATION_EXPIRY_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
+app.post('/api/users', async (req, res) => {
+  const { email } = req.body || {};
 
-app.post('/api/users', signupLimiter, async (req, res) => {
-  const { email, website, phone } = req.body || {};
-
-  // Honeypot: "website" is hidden from real users via CSS. Bots that
-  // auto-fill every field will populate it. Pretend success, save nothing.
-  if (website && String(website).trim() !== '') {
-    return res.json({ ok: true, status: 'pending' });
+  if (
+    !email ||
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+  ) {
+    return res.status(400).json({
+      error: 'Valid email required',
+    });
   }
 
   if (!usersCollection) {
-    return res.status(503).json({ error: 'Database unavailable' });
-  }
-
-  const normalizedEmail = String(email || '').trim().toLowerCase();
-
-  const validation = await validateEmailAddress(normalizedEmail);
-  if (!validation.valid) {
-    const messages = {
-      missing_email: 'Email is required.',
-      invalid_syntax: "That doesn't look like a valid email address.",
-      disposable_domain: "Temporary or disposable email addresses aren't accepted. Please use a permanent address.",
-      no_mx_record: "This email domain can't receive mail. Please check for typos.",
-    };
-    return res.status(400).json({
-      error: messages[validation.reason] || 'Invalid email address.',
-      reason: validation.reason,
+    return res.status(503).json({
+      error: 'Database unavailable',
     });
   }
 
   try {
-    const existing = await usersCollection.findOne({ email: normalizedEmail });
-
-    if (existing && existing.verified) {
-      // Already confirmed on a previous visit — nothing to send, just tell
-      // the frontend it's good to go.
-      return res.json({ ok: true, status: 'verified' });
-    }
-
-    const token = crypto.randomBytes(32).toString('hex');
-    const confirmationExpires = new Date(Date.now() + CONFIRMATION_EXPIRY_MS);
-
-    // Phone/WhatsApp is optional and unverified — just a lead field.
-    // Only set it if the user actually provided one this time, so a blank
-    // resend doesn't wipe out a phone number saved on an earlier attempt.
-    const normalizedPhone = String(phone || '').trim();
-    const setFields = {
-      email: normalizedEmail,
-      lastSeen: new Date(),
-      verified: false,
-      confirmationToken: token,
-      confirmationExpires,
-      signupIp: req.ip,
-    };
-    if (normalizedPhone) {
-      setFields.phone = normalizedPhone;
-    }
-
     await usersCollection.updateOne(
-      { email: normalizedEmail },
+      { email: String(email).trim().toLowerCase() },
       {
-        $set: setFields,
+        $set: {
+          email: String(email).trim().toLowerCase(),
+          lastSeen: new Date(),
+        },
         $setOnInsert: {
           firstSeen: new Date(),
         },
       },
-      { upsert: true }
-    );
-
-    await sendConfirmationEmail(normalizedEmail, token);
-
-    return res.json({
-      ok: true,
-      status: 'pending',
-      message: 'Check your inbox to confirm your email, then come back and refresh.',
-    });
-  } catch (error) {
-    console.error('DB error:', error.message);
-    return res.status(500).json({ error: 'Failed to save' });
-  }
-});
-
-// Frontend polls this to find out whether a pending signup has been
-// confirmed yet, so it can unlock playback without a full page reload.
-app.get('/api/users/status', async (req, res) => {
-  const email = String(req.query.email || '').trim().toLowerCase();
-
-  if (!email || !usersCollection) {
-    return res.status(400).json({ verified: false });
-  }
-
-  try {
-    const user = await usersCollection.findOne({ email });
-    return res.json({ verified: !!(user && user.verified) });
-  } catch (error) {
-    console.error('Status check error:', error.message);
-    return res.status(500).json({ verified: false });
-  }
-});
-
-// Confirmation link target — clicked from the email.
-app.get('/api/confirm/:token', confirmLimiter, async (req, res) => {
-  const { token } = req.params;
-
-  if (!usersCollection) {
-    return res.status(503).send(renderConfirmPage(false, 'Database unavailable.'));
-  }
-
-  try {
-    const user = await usersCollection.findOne({ confirmationToken: token });
-
-    if (!user) {
-      return res.status(400).send(renderConfirmPage(false, 'This confirmation link is invalid or has already been used.'));
-    }
-    if (user.confirmationExpires && new Date(user.confirmationExpires) < new Date()) {
-      return res.status(400).send(renderConfirmPage(false, 'This confirmation link has expired. Please enter your email again.'));
-    }
-
-    await usersCollection.updateOne(
-      { _id: user._id },
       {
-        $set: { verified: true, verifiedAt: new Date() },
-        $unset: { confirmationToken: '', confirmationExpires: '' },
+        upsert: true,
       }
     );
 
-    return res.status(200).send(renderConfirmPage(true, 'Your email is confirmed! Go back to WorldTV and refresh to start watching.'));
+    return res.json({
+      ok: true,
+    });
   } catch (error) {
-    console.error('Confirm error:', error.message);
-    return res.status(500).send(renderConfirmPage(false, 'Something went wrong confirming your email.'));
+    console.error(
+      'DB error:',
+      error.message
+    );
+
+    return res.status(500).json({
+      error: 'Failed to save',
+    });
   }
 });
-
-function renderConfirmPage(success, message) {
-  const siteUrl = process.env.SITE_URL || 'https://worldtvchannel.online';
-  return `
-    <!DOCTYPE html>
-    <html>
-      <head><meta charset="utf-8"><title>WorldTV</title></head>
-      <body style="font-family: sans-serif; text-align: center; padding: 60px 20px;">
-        <h1 style="color: ${success ? '#16a34a' : '#dc2626'};">${success ? '✓ Confirmed' : '✗ Not confirmed'}</h1>
-        <p>${message}</p>
-        <a href="${siteUrl}">Return to WorldTV</a>
-      </body>
-    </html>
-  `;
-}
 
 // ============================================================
 // VISITOR GEOLOCATION
@@ -478,16 +355,11 @@ app.get(
 
       const [
         usersAllTime,
-        usersVerifiedAllTime,
         usersDay,
         usersWeek,
         allUsers,
       ] = await Promise.all([
         usersCollection.countDocuments({}),
-
-        usersCollection.countDocuments({
-          verified: true,
-        }),
 
         usersCollection.countDocuments({
           firstSeen: {
@@ -509,10 +381,6 @@ app.get(
           .toArray(),
       ]);
 
-      const conversionRatePercent = visitsAllTime > 0
-        ? Number(((usersVerifiedAllTime / visitsAllTime) * 100).toFixed(2))
-        : 0;
-
       return res.json({
         visits: {
           allTime: visitsAllTime,
@@ -523,23 +391,9 @@ app.get(
 
         users: {
           allTime: usersAllTime,
-          verifiedAllTime: usersVerifiedAllTime,
           day: usersDay,
           week: usersWeek,
-          list: allUsers.map((u) => ({
-            email: u.email,
-            phone: u.phone || null,
-            verified: !!u.verified,
-            firstSeen: u.firstSeen,
-            lastSeen: u.lastSeen,
-            verifiedAt: u.verifiedAt || null,
-          })),
-        },
-
-        funnel: {
-          visitsAllTime,
-          verifiedUsersAllTime: usersVerifiedAllTime,
-          conversionRatePercent,
+          list: allUsers,
         },
       });
     } catch (error) {

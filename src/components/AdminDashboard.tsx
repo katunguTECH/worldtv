@@ -16,7 +16,13 @@ interface UserRecord {
 
 interface Stats {
   visits: { allTime: number; day: number; week: number; recent: Visit[] };
-  users: { allTime: number; day: number; week: number; list: UserRecord[] };
+  users: {
+    allTime: number;
+    day: number;
+    week: number;
+    bySourceWeek?: { source: string; count: number }[];
+    list: UserRecord[];
+  };
 }
 
 const ADMIN_KEY_STORAGE = 'worldtv_admin_key';
@@ -103,6 +109,24 @@ const AdminDashboard: React.FC = () => {
             <StatCard label="Emails This Week" value={stats.users.week} />
             <StatCard label="Emails All-Time" value={stats.users.allTime} />
           </div>
+
+          {/* Signups this week by trigger — lets you compare the new
+              timed_45s gate against the old baseline (recorded as
+              "unknown" for anything signed up before source tracking
+              existed). */}
+          {stats.users.bySourceWeek && stats.users.bySourceWeek.length > 0 && (
+            <div className="bg-gray-800 rounded-lg p-4 mb-6">
+              <div className="text-gray-400 text-sm mb-3">This Week's Signups by Trigger</div>
+              <div className="flex flex-wrap gap-3">
+                {stats.users.bySourceWeek.map((s) => (
+                  <div key={s.source} className="bg-gray-900 rounded px-4 py-2">
+                    <div className="text-white text-lg font-bold">{s.count}</div>
+                    <div className="text-gray-500 text-xs">{s.source}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Tabs */}
           <div className="flex gap-2 mb-4">

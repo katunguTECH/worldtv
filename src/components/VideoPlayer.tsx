@@ -12,6 +12,12 @@ interface VideoPlayerProps {
    * unmounting while PiP is active would kill the floating window.
    */
   onPipChange?: (isInPip: boolean) => void;
+  /*
+   * Called whenever the underlying stream actually starts or stops
+   * playing (not just "modal open" — real playback). Used by the
+   * parent App to drive a watch-timer for the timed email gate.
+   */
+  onPlayStateChange?: (isPlaying: boolean) => void;
 }
 
 export interface VideoPlayerHandle {
@@ -168,16 +174,21 @@ registerCastButtons();
 const VideoPlayer = React.forwardRef<
   VideoPlayerHandle,
   VideoPlayerProps
->(({ streamUrl, channelName, onPipChange }, ref) => {
+>(({ streamUrl, channelName, onPipChange, onPlayStateChange }, ref) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerRef = useRef<any>(null);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retryCountRef = useRef(0);
   const onPipChangeRef = useRef(onPipChange);
+  const onPlayStateChangeRef = useRef(onPlayStateChange);
 
   useEffect(() => {
     onPipChangeRef.current = onPipChange;
   }, [onPipChange]);
+
+  useEffect(() => {
+    onPlayStateChangeRef.current = onPlayStateChange;
+  }, [onPlayStateChange]);
 
   React.useImperativeHandle(ref, () => ({
     requestPip: async () => {
@@ -335,6 +346,7 @@ const VideoPlayer = React.forwardRef<
       }
 
       playerRef.current = null;
+      onPlayStateChangeRef.current?.(false);
     }
   };
 
@@ -542,6 +554,11 @@ const VideoPlayer = React.forwardRef<
       retryCountRef.current = 0;
       setLoadError(null);
       setIsRetrying(false);
+      onPlayStateChangeRef.current?.(true);
+    });
+
+    player.on('pause', () => {
+      onPlayStateChangeRef.current?.(false);
     });
 
     player.on('waiting', () => {
