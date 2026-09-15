@@ -944,6 +944,30 @@ async function loadChannels(
         ];
 
         // ----------------------------------------------------
+        // SERVE RAW LIST IMMEDIATELY
+        // ----------------------------------------------------
+        // Without this, /api/channels blocks until the full
+        // health-check pass completes (tens of minutes on a
+        // cold boot at low concurrency), which is what made
+        // the frontend "Loading channels..." spinner hang.
+        // We publish the unfiltered list now; the health check
+        // below replaces this cache entry with the filtered
+        // list when it finishes.
+
+        if (rawChannels.length > 0) {
+          channelCache = {
+            data: rawChannels,
+            timestamp: Date.now(),
+            lastHealthCheckAt:
+              channelCache.lastHealthCheckAt || 0,
+          };
+
+          console.log(
+            `Serving ${rawChannels.length} raw channels immediately; health-checking in background...`
+          );
+        }
+
+        // ----------------------------------------------------
         // DROP DEAD / AUDIO-ONLY STREAMS BEFORE CACHING
         // ----------------------------------------------------
         // iptv-org's per-country playlists include plenty of
@@ -1312,7 +1336,11 @@ app.get('/api/iptv-org-channels', async (req, res) => {
     if (iptvOrgCache.data.length > 0) {
       const stale = Date.now() - iptvOrgCache.timestamp >= IPTV_ORG_CACHE_DURATION;
 
-      if (stale && !iptvOrgLoadPromise) {
+      // Only kick off a background refresh if the main channel
+      // loader isn't already mid-pass. Two concurrent ffprobe
+      // passes blow past the Starter plan's 512MB and OOM the
+      // instance, which is exactly what we're fixing here.
+      if (stale && !iptvOrgLoadPromise && !channelLoadPromise) {
         loadIptvOrgChannels().catch((error) => {
           console.warn('Background iptv-org refresh failed:', error.message);
         });
@@ -1326,13 +1354,29 @@ app.get('/api/iptv-org-channels', async (req, res) => {
       });
     }
 
-    const channels = await loadIptvOrgChannels();
+    // Cold path. Don't block on a full health-check pass, and
+    // don't race the main loader — that's what caused the OOM.
+    // Queue our pass to start after the main one finishes, then
+    // return immediately so the frontend isn't stuck.
+    (async () => {
+      try {
+        if (channelLoadPromise) {
+          await channelLoadPromise.catch(() => {});
+        }
+        await loadIptvOrgChannels();
+      } catch (error) {
+        console.warn(
+          'Deferred iptv-org load failed:',
+          error.message
+        );
+      }
+    })();
 
     return res.json({
-      channels,
-      count: channels.length,
-      cachedAt: iptvOrgCache.timestamp,
-      loading: false,
+      channels: [],
+      count: 0,
+      cachedAt: 0,
+      loading: true,
     });
   } catch (error) {
     console.error('iptv-org channels API error:', error.message);
