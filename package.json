@@ -13,6 +13,7 @@
     "eject": "react-scripts eject"
   },
   "dependencies": {
+    "@ffprobe-installer/ffprobe": "^2.1.2",
     "express": "^4.19.2",
     "express-rate-limit": "^8.6.2",
     "mongodb": "^7.5.0",

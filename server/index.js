@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const { MongoClient } = require('mongodb');
 const { Agent, setGlobalDispatcher } = require('undici');
+const { filterHealthyChannels } = require('./streamHealth');
 
 const app = express();
 
@@ -416,6 +417,7 @@ app.get(
 let channelCache = {
   data: [],
   timestamp: 0,
+  lastHealthCheckAt: 0,
 };
 
 const CACHE_DURATION =
@@ -936,10 +938,54 @@ async function loadChannels(
         const youtubeChannels =
           getYoutubeChannels();
 
-        const channels = [
+        const rawChannels = [
           ...iptvChannels,
           ...youtubeChannels,
         ];
+
+        // ----------------------------------------------------
+        // DROP DEAD / AUDIO-ONLY STREAMS BEFORE CACHING
+        // ----------------------------------------------------
+        // iptv-org's per-country playlists include plenty of
+        // links that no longer resolve, or that only carry an
+        // audio track (common failure mode for scraped IPTV
+        // sources). Probing with ffprobe before caching means
+        // nobody sees a channel card that just won't play.
+
+        console.log(
+          `Health-checking ${rawChannels.length} channels before caching...`
+        );
+
+        const { healthy, removed } = await filterHealthyChannels(
+          rawChannels,
+          {
+            concurrency: 30,
+            timeoutMs: 8000,
+            onProgress: (checked, total) => {
+              if (checked % 250 === 0 || checked === total) {
+                console.log(
+                  `  Health check progress: ${checked}/${total}`
+                );
+              }
+            },
+          }
+        );
+
+        if (removed.length > 0) {
+          console.log(
+            `Health check removed ${removed.length}/${rawChannels.length} dead or audio-only channels`
+          );
+          removed.slice(0, 25).forEach(({ channel, reason }) => {
+            console.log(
+              `  ✗ ${channel.name} (${channel.country}) — ${reason}`
+            );
+          });
+          if (removed.length > 25) {
+            console.log(`  ...and ${removed.length - 25} more`);
+          }
+        }
+
+        const channels = healthy;
 
         // ----------------------------------------------------
         // ONLY REPLACE CACHE IF WE RECEIVED CHANNELS
@@ -952,10 +998,12 @@ async function loadChannels(
             data: channels,
             timestamp:
               Date.now(),
+            lastHealthCheckAt:
+              Date.now(),
           };
 
           console.log(
-            `Channel cache refreshed successfully: ${channels.length} channels`
+            `Channel cache refreshed successfully: ${channels.length} channels (${removed.length} removed by health check)`
           );
         } else {
           console.warn(
@@ -980,6 +1028,320 @@ async function loadChannels(
 
   return channelLoadPromise;
 }
+
+// ============================================================
+// HOURLY DEAD-STREAM PRUNE
+// ============================================================
+// A full refresh (loadChannels) re-pulls every country's playlist
+// from iptv-org every 6h. That's too slow to catch a stream that
+// dies in between refreshes. This job instead re-checks the
+// channels already in the cache — no re-fetching from iptv-org,
+// just re-probing the URLs we're currently serving — and drops
+// anything that's stopped playing since it was cached.
+
+const pruneLocks = new Set();
+
+// Generic: re-probes every channel currently in a given cache and
+// drops whatever fails, without re-fetching from upstream. Takes
+// getters/setters rather than the cache variable directly, since
+// both channelCache and (later) iptvOrgCache are reassigned `let`
+// bindings, not mutable objects.
+async function pruneCache(label, getCache, setCache) {
+  if (pruneLocks.has(label)) {
+    console.log(`[hourly prune:${label}] already running, skipping this tick.`);
+    return { skipped: true };
+  }
+
+  const cache = getCache();
+  if (cache.data.length === 0) {
+    return { skipped: true, reason: 'cache is empty' };
+  }
+
+  pruneLocks.add(label);
+  const startedAt = Date.now();
+  const before = cache.data.length;
+
+  try {
+    console.log(`[hourly prune:${label}] Re-checking ${before} cached channels...`);
+
+    const { healthy, removed } = await filterHealthyChannels(cache.data, {
+      concurrency: 30,
+      timeoutMs: 8000,
+      onProgress: (checked, total) => {
+        if (checked % 250 === 0 || checked === total) {
+          console.log(`  [hourly prune:${label}] progress: ${checked}/${total}`);
+        }
+      },
+    });
+
+    // Never let a bad prune pass wipe the cache out — e.g. if
+    // ffprobe/network briefly broke and every check "failed",
+    // keep the previous list rather than serving an empty grid.
+    if (healthy.length === 0 && before > 0) {
+      console.warn(
+        `[hourly prune:${label}] Every cached channel failed its check — ` +
+        'assuming something is wrong with the checker itself, not ' +
+        'the channels. Keeping the existing cache untouched.'
+      );
+      return { skipped: true, reason: 'suspicious 100% failure rate' };
+    }
+
+    setCache({
+      ...cache,
+      data: healthy,
+      lastHealthCheckAt: Date.now(),
+    });
+
+    const took = Math.round((Date.now() - startedAt) / 1000);
+    console.log(
+      `[hourly prune:${label}] Done in ${took}s: removed ${removed.length}/${before}, ${healthy.length} remain.`
+    );
+
+    if (removed.length > 0) {
+      removed.slice(0, 25).forEach(({ channel, reason }) => {
+        console.log(`  ✗ ${channel.name} (${channel.country}) — ${reason}`);
+      });
+      if (removed.length > 25) {
+        console.log(`  ...and ${removed.length - 25} more`);
+      }
+    }
+
+    return {
+      skipped: false,
+      before,
+      after: healthy.length,
+      removedCount: removed.length,
+      removed: removed.map(({ channel, reason }) => ({
+        id: channel.id,
+        name: channel.name,
+        country: channel.country,
+        streamUrl: channel.streamUrl,
+        reason,
+      })),
+    };
+  } catch (error) {
+    console.error(`[hourly prune:${label}] failed:`, error.message);
+    return { skipped: true, reason: error.message };
+  } finally {
+    pruneLocks.delete(label);
+  }
+}
+
+function pruneDeadChannels() {
+  return pruneCache(
+    'main',
+    () => channelCache,
+    (next) => {
+      channelCache = next;
+    }
+  );
+}
+
+function pruneIptvOrgChannels() {
+  return pruneCache(
+    'iptv-org',
+    () => iptvOrgCache,
+    (next) => {
+      iptvOrgCache = next;
+    }
+  );
+}
+
+const PRUNE_INTERVAL_MS = 60 * 60 * 1000; // every hour
+
+function startHourlyPrune() {
+  setInterval(() => {
+    pruneDeadChannels().catch((error) => {
+      console.error('[hourly prune:main] unhandled error:', error.message);
+    });
+
+    pruneIptvOrgChannels().catch((error) => {
+      console.error('[hourly prune:iptv-org] unhandled error:', error.message);
+    });
+  }, PRUNE_INTERVAL_MS);
+
+  console.log(
+    `Hourly dead-stream prune scheduled (every ${PRUNE_INTERVAL_MS / 60000} min).`
+  );
+}
+
+// ============================================================
+// IPTV-ORG GLOBAL CHANNEL LIST (legal-filtered + health-checked)
+// ============================================================
+// Separate from the per-country m3u playlists above — this pulls
+// iptv-org's global channels/streams/blocklist datasets, drops
+// anything NSFW/closed/DMCA-blocklisted, health-checks what's
+// left with ffprobe, and caches the result.
+//
+// This used to be fetched directly from the browser (see the old
+// fetchLegalIptvOrgChannels in iptvService.ts). It's moved here
+// so ffprobe can be used on it — that only works server-side.
+
+const IPTV_ORG_CHANNELS_URL = 'https://iptv-org.github.io/api/channels.json';
+const IPTV_ORG_STREAMS_URL = 'https://iptv-org.github.io/api/streams.json';
+const IPTV_ORG_BLOCKLIST_URL = 'https://iptv-org.github.io/api/blocklist.json';
+
+const IPTV_ORG_CACHE_DURATION = 24 * 60 * 60 * 1000; // 24h — blocklist changes daily
+
+let iptvOrgCache = {
+  data: [],
+  timestamp: 0,
+  lastHealthCheckAt: 0,
+};
+
+let iptvOrgLoadPromise = null;
+
+function capitalize(value) {
+  return value ? value.charAt(0).toUpperCase() + value.slice(1) : value;
+}
+
+async function loadIptvOrgChannels(options = {}) {
+  const forceRefresh = options.forceRefresh === true;
+
+  if (
+    !forceRefresh &&
+    iptvOrgCache.data.length > 0 &&
+    Date.now() - iptvOrgCache.timestamp < IPTV_ORG_CACHE_DURATION
+  ) {
+    return iptvOrgCache.data;
+  }
+
+  if (iptvOrgLoadPromise) {
+    return iptvOrgLoadPromise;
+  }
+
+  iptvOrgLoadPromise = (async () => {
+    try {
+      console.log('Refreshing iptv-org global channel list...');
+
+      const [channelsRes, streamsRes, blocklistRes] = await Promise.all([
+        fetch(IPTV_ORG_CHANNELS_URL),
+        fetch(IPTV_ORG_STREAMS_URL),
+        fetch(IPTV_ORG_BLOCKLIST_URL),
+      ]);
+
+      if (!channelsRes.ok || !streamsRes.ok || !blocklistRes.ok) {
+        throw new Error('One or more iptv-org endpoints failed to respond');
+      }
+
+      const [channels, streams, blocklist] = await Promise.all([
+        channelsRes.json(),
+        streamsRes.json(),
+        blocklistRes.json(),
+      ]);
+
+      const blockedIds = new Set(blocklist.map((entry) => entry.channel));
+
+      const streamByChannelId = new Map();
+      for (const stream of streams) {
+        if (!streamByChannelId.has(stream.channel)) {
+          streamByChannelId.set(stream.channel, stream.url);
+        }
+      }
+
+      const candidates = [];
+      for (const ch of channels) {
+        if (ch.is_nsfw) continue; // adult content
+        if (ch.closed) continue; // no longer broadcasting
+        if (blockedIds.has(ch.id)) continue; // DMCA / removal request on file
+
+        const streamUrl = streamByChannelId.get(ch.id);
+        if (!streamUrl) continue; // nothing playable
+
+        candidates.push({
+          id: `iptvorg-${ch.id}`,
+          name: ch.name,
+          country: ch.country,
+          category: ch.categories?.[0] ? capitalize(ch.categories[0]) : 'General',
+          logo: ch.logo || '',
+          language: ch.languages?.[0] || '',
+          streamUrl,
+        });
+      }
+
+      console.log(
+        `iptv-org: ${candidates.length} legal candidates out of ${channels.length} total ` +
+        `(${blockedIds.size} blocklisted). Health-checking...`
+      );
+
+      const { healthy, removed } = await filterHealthyChannels(candidates, {
+        concurrency: 30,
+        timeoutMs: 8000,
+        onProgress: (checked, total) => {
+          if (checked % 250 === 0 || checked === total) {
+            console.log(`  iptv-org health check: ${checked}/${total}`);
+          }
+        },
+      });
+
+      if (removed.length > 0) {
+        console.log(
+          `iptv-org: removed ${removed.length}/${candidates.length} dead or audio-only channels`
+        );
+        removed.slice(0, 25).forEach(({ channel, reason }) => {
+          console.log(`  ✗ ${channel.name} (${channel.country}) — ${reason}`);
+        });
+      }
+
+      if (healthy.length > 0) {
+        iptvOrgCache = {
+          data: healthy,
+          timestamp: Date.now(),
+          lastHealthCheckAt: Date.now(),
+        };
+
+        console.log(`iptv-org channel cache refreshed: ${healthy.length} channels`);
+      } else {
+        console.warn('iptv-org refresh returned no healthy channels. Existing cache preserved.');
+      }
+
+      return iptvOrgCache.data;
+    } catch (error) {
+      console.error('iptv-org refresh failed:', error.message);
+      return iptvOrgCache.data;
+    } finally {
+      iptvOrgLoadPromise = null;
+    }
+  })();
+
+  return iptvOrgLoadPromise;
+}
+
+app.get('/api/iptv-org-channels', async (req, res) => {
+  try {
+    if (iptvOrgCache.data.length > 0) {
+      const stale = Date.now() - iptvOrgCache.timestamp >= IPTV_ORG_CACHE_DURATION;
+
+      if (stale && !iptvOrgLoadPromise) {
+        loadIptvOrgChannels().catch((error) => {
+          console.warn('Background iptv-org refresh failed:', error.message);
+        });
+      }
+
+      return res.json({
+        channels: iptvOrgCache.data,
+        count: iptvOrgCache.data.length,
+        cachedAt: iptvOrgCache.timestamp,
+        loading: Boolean(iptvOrgLoadPromise),
+      });
+    }
+
+    const channels = await loadIptvOrgChannels();
+
+    return res.json({
+      channels,
+      count: channels.length,
+      cachedAt: iptvOrgCache.timestamp,
+      loading: false,
+    });
+  } catch (error) {
+    console.error('iptv-org channels API error:', error.message);
+    return res.status(500).json({
+      error: 'Failed to load iptv-org channels',
+      message: error.message,
+    });
+  }
+});
 
 // ============================================================
 // CHANNEL API
@@ -1101,6 +1463,49 @@ app.get(
 
         message:
           error.message,
+      });
+    }
+  }
+);
+
+// ============================================================
+// MANUAL HEALTH-CHECK PRUNE (ADMIN)
+// ============================================================
+// Same job the hourly scheduler runs, exposed so it can be
+// triggered on demand (e.g. right after deploying this feature,
+// rather than waiting up to an hour for the first automatic run).
+
+app.get(
+  '/api/admin/prune-now',
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const [main, iptvOrg] = await Promise.all([
+        pruneDeadChannels(),
+        pruneIptvOrgChannels(),
+      ]);
+
+      return res.json({
+        main: {
+          ...main,
+          cacheSize: channelCache.data.length,
+          lastHealthCheckAt: channelCache.lastHealthCheckAt,
+        },
+        iptvOrg: {
+          ...iptvOrg,
+          cacheSize: iptvOrgCache.data.length,
+          lastHealthCheckAt: iptvOrgCache.lastHealthCheckAt,
+        },
+      });
+    } catch (error) {
+      console.error(
+        'Manual prune error:',
+        error.message
+      );
+
+      return res.status(500).json({
+        error: 'Failed to prune channels',
+        message: error.message,
       });
     }
   }
@@ -2305,4 +2710,8 @@ app.listen(PORT, () => {
       error.message
     );
   });
+
+  // Re-check the currently cached streams every hour and drop
+  // whatever's stopped playing since it was cached.
+  startHourlyPrune();
 });
