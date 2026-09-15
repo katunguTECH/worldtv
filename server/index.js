@@ -959,7 +959,7 @@ async function loadChannels(
         const { healthy, removed } = await filterHealthyChannels(
           rawChannels,
           {
-            concurrency: 30,
+            concurrency: Number(process.env.HEALTHCHECK_CONCURRENCY) || 5,
             timeoutMs: 8000,
             onProgress: (checked, total) => {
               if (checked % 250 === 0 || checked === total) {
@@ -1065,7 +1065,7 @@ async function pruneCache(label, getCache, setCache) {
     console.log(`[hourly prune:${label}] Re-checking ${before} cached channels...`);
 
     const { healthy, removed } = await filterHealthyChannels(cache.data, {
-      concurrency: 30,
+      concurrency: Number(process.env.HEALTHCHECK_CONCURRENCY) || 5,
       timeoutMs: 8000,
       onProgress: (checked, total) => {
         if (checked % 250 === 0 || checked === total) {
@@ -1265,7 +1265,7 @@ async function loadIptvOrgChannels(options = {}) {
       );
 
       const { healthy, removed } = await filterHealthyChannels(candidates, {
-        concurrency: 30,
+        concurrency: Number(process.env.HEALTHCHECK_CONCURRENCY) || 5,
         timeoutMs: 8000,
         onProgress: (checked, total) => {
           if (checked % 250 === 0 || checked === total) {
