@@ -127,6 +127,15 @@ function App() {
     useState<Channel | null>(null);
 
   /*
+    Whether the grid is currently filtered down to favorites
+    only. Toggled by the "Favs" button in the header; cleared
+    whenever the viewer picks a country or category so those
+    controls don't silently fight the favorites filter.
+  */
+  const [showFavoritesOnly, setShowFavoritesOnly] =
+    useState(false);
+
+  /*
     The big modal ("now playing" overlay) and the mounted
     <VideoPlayer> are decoupled on purpose. Closing the modal
     normally unmounts the player and stops the stream — but if
@@ -296,7 +305,36 @@ function App() {
 
     let channels: Channel[] = [];
 
-    if (searchQuery) {
+    if (showFavoritesOnly) {
+      /*
+        Favorites view is its own mode: pull from the full
+        channel list (not the currently-selected country) so
+        favorites from any country show up together, then keep
+        only what's actually favorited. Search still narrows
+        further if the viewer is typing.
+      */
+      channels =
+        getChannelsByCountry('All').filter(
+          channel => isFavorite(channel.id)
+        );
+
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+
+        channels = channels.filter(
+          channel =>
+            channel.name
+              .toLowerCase()
+              .includes(q) ||
+            channel.country
+              .toLowerCase()
+              .includes(q) ||
+            channel.category
+              .toLowerCase()
+              .includes(q)
+        );
+      }
+    } else if (searchQuery) {
       channels =
         searchChannels(
           searchQuery
@@ -328,7 +366,9 @@ function App() {
     searchQuery,
     selectedCountry,
     selectedCategory,
-    loading
+    loading,
+    showFavoritesOnly,
+    favorites
   ]);
 
   /*
@@ -345,6 +385,13 @@ function App() {
     );
 
     setSearchQuery('');
+
+    /*
+      Picking a country is a deliberate "show me this region"
+      action, so drop out of favorites-only mode. Otherwise the
+      grid would keep ignoring the country they just clicked.
+    */
+    setShowFavoritesOnly(false);
 
     /*
       When a user manually selects a country,
@@ -385,6 +432,26 @@ function App() {
       category
     );
 
+    setSearchQuery('');
+
+    setShowFavoritesOnly(false);
+  };
+
+  /*
+  ============================================================
+  FAVORITES VIEW TOGGLE
+  ============================================================
+  */
+
+  const handleToggleFavoritesView = () => {
+    setShowFavoritesOnly(
+      prev => !prev
+    );
+
+    /*
+      Clear search so the first click of "Favs" shows every
+      favorite, not "favorites matching whatever was typed".
+    */
     setSearchQuery('');
   };
 
@@ -577,6 +644,8 @@ function App() {
   ============================================================
   */
 
+  const favoriteCount = favorites.length;
+
   return (
     <div className="flex h-screen bg-gray-900">
 
@@ -615,12 +684,18 @@ function App() {
                 WorldTV
               </h1>
 
-              {selectedCountry !==
-                'All' && (
-                <div className="text-gray-400 text-sm mt-1">
-                  Live TV from{' '}
-                  {selectedCountry}
+              {showFavoritesOnly ? (
+                <div className="text-yellow-400 text-sm mt-1">
+                  Your favorites
                 </div>
+              ) : (
+                selectedCountry !==
+                  'All' && (
+                  <div className="text-gray-400 text-sm mt-1">
+                    Live TV from{' '}
+                    {selectedCountry}
+                  </div>
+                )
               )}
 
             </div>
@@ -659,6 +734,35 @@ function App() {
                 Random
               </button>
 
+              <button
+                onClick={
+                  handleToggleFavoritesView
+                }
+                title={
+                  showFavoritesOnly
+                    ? 'Show all channels'
+                    : 'Show only your favorites'
+                }
+                className={
+                  showFavoritesOnly
+                    ? 'bg-yellow-400 hover:bg-yellow-500 text-gray-900 px-3 py-2 rounded-lg transition flex items-center gap-1 text-sm font-semibold ring-2 ring-yellow-300'
+                    : 'bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-2 rounded-lg transition flex items-center gap-1 text-sm'
+                }
+              >
+                ★ Favs
+                {favoriteCount > 0 && (
+                  <span
+                    className={
+                      showFavoritesOnly
+                        ? 'bg-gray-900 text-yellow-300 text-xs px-1.5 py-0.5 rounded-full'
+                        : 'bg-yellow-800 text-yellow-100 text-xs px-1.5 py-0.5 rounded-full'
+                    }
+                  >
+                    {favoriteCount}
+                  </span>
+                )}
+              </button>
+
             </div>
 
           </div>
@@ -678,23 +782,45 @@ function App() {
 
         <main className="flex-1 overflow-y-auto p-4">
 
-          <ChannelGrid
-            channels={
-              currentChannels
-            }
-            onChannelSelect={
-              handleChannelSelect
-            }
-            favorites={
-              favorites
-            }
-            onToggleFavorite={
-              toggleFavorite
-            }
-            isFavorite={
-              isFavorite
-            }
-          />
+          {showFavoritesOnly &&
+          currentChannels.length === 0 ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center max-w-md px-4">
+                <div className="text-yellow-400 text-5xl mb-4">
+                  ★
+                </div>
+                <div className="text-white text-xl mb-2">
+                  No favorites yet
+                </div>
+                <div className="text-gray-400 text-sm">
+                  Open any channel and click the{' '}
+                  <span className="text-yellow-400 font-medium">
+                    Fav
+                  </span>{' '}
+                  button in the player to save it here.
+                  Favorites are stored on this device.
+                </div>
+              </div>
+            </div>
+          ) : (
+            <ChannelGrid
+              channels={
+                currentChannels
+              }
+              onChannelSelect={
+                handleChannelSelect
+              }
+              favorites={
+                favorites
+              }
+              onToggleFavorite={
+                toggleFavorite
+              }
+              isFavorite={
+                isFavorite
+              }
+            />
+          )}
 
         </main>
 
@@ -756,19 +882,26 @@ function App() {
                         selectedChannel.id
                       )
                     }
+                    title={
+                      isFavorite(
+                        selectedChannel.id
+                      )
+                        ? 'Remove from favorites'
+                        : 'Add to favorites'
+                    }
                     className={
                       isFavorite(
                         selectedChannel.id
                       )
-                        ? 'text-xl transition text-yellow-400'
+                        ? 'text-xl transition text-yellow-400 hover:text-yellow-300'
                         : 'text-xl transition text-gray-500 hover:text-yellow-400'
                     }
                   >
                     {isFavorite(
                       selectedChannel.id
                     )
-                      ? 'Fav'
-                      : 'Not fav'}
+                      ? '★ Fav'
+                      : '☆ Fav'}
                   </button>
 
                 </div>
