@@ -156,6 +156,111 @@ app.post('/api/users', async (req, res) => {
 });
 
 // ============================================================
+// FAVORITES
+// ============================================================
+// Keyed by email so a viewer's favorites follow them across
+// devices and survive browser-data clears. Clients also mirror
+// to localStorage so no-email users still get persistence on
+// the same device.
+
+app.get('/api/favorites', async (req, res) => {
+  const email = String(
+    req.query.email || ''
+  ).trim().toLowerCase();
+
+  if (!email) {
+    return res.status(400).json({
+      error: 'email query param required',
+    });
+  }
+
+  if (!usersCollection) {
+    return res.json({ favorites: [] });
+  }
+
+  try {
+    const user = await usersCollection.findOne({
+      email,
+    });
+
+    return res.json({
+      favorites: Array.isArray(user?.favorites)
+        ? user.favorites
+        : [],
+    });
+  } catch (error) {
+    console.error(
+      'Favorites fetch error:',
+      error.message
+    );
+
+    return res.status(500).json({
+      error: 'Failed to load favorites',
+    });
+  }
+});
+
+app.post('/api/favorites', async (req, res) => {
+  const email = String(
+    req.body?.email || ''
+  ).trim().toLowerCase();
+
+  const favorites = req.body?.favorites;
+
+  if (!email) {
+    return res.status(400).json({
+      error: 'email required',
+    });
+  }
+
+  if (
+    !Array.isArray(favorites) ||
+    !favorites.every((id) => typeof id === 'string')
+  ) {
+    return res.status(400).json({
+      error: 'favorites must be an array of channel IDs',
+    });
+  }
+
+  if (!usersCollection) {
+    return res.status(503).json({
+      error: 'Database unavailable',
+    });
+  }
+
+  try {
+    await usersCollection.updateOne(
+      { email },
+      {
+        $set: {
+          email,
+          favorites,
+          favoritesUpdatedAt: new Date(),
+        },
+        $setOnInsert: {
+          firstSeen: new Date(),
+        },
+      },
+      { upsert: true }
+    );
+
+    return res.json({
+      ok: true,
+      count: favorites.length,
+    });
+  } catch (error) {
+    console.error(
+      'Favorites save error:',
+      error.message
+    );
+
+    return res.status(500).json({
+      error: 'Failed to save favorites',
+    });
+  }
+});
+
+// ============================================================
 // VISITOR GEOLOCATION
 // ============================================================
 

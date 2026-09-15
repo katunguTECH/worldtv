@@ -598,12 +598,12 @@ function App() {
         'iptv_channels'
       );
 
-      localStorage.removeItem(
-        'favorites'
-      );
+      // Favorites are user data, not cache — deliberately NOT
+      // removed here. They live under 'worldtv_favorites' (and
+      // on the server, keyed by email) and survive this reset.
 
       alert(
-        'Cache cleared! Click Refresh to reload channels.'
+        'Cache cleared! Favorites were kept. Click Refresh to reload channels.'
       );
 
       window.location.reload();
