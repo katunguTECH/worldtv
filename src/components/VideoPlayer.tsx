@@ -159,9 +159,6 @@ const VideoPlayer = React.forwardRef<
 
       plugins: {
         chromecast: {
-          // We add the button explicitly in controlBar.children below
-          // (using its registered name 'ChromecastButton'), so turn
-          // off the plugin's own auto-insert to avoid a duplicate.
           addButtonToControlBar: false,
           receiver: 'CC1AD845',
           preloadWebComponents: true,
@@ -196,28 +193,6 @@ const VideoPlayer = React.forwardRef<
           'seekToLive',
           'remainingTimeDisplay',
           'playbackRateMenuButton',
-
-          /*
-           * Casting buttons.
-           *
-           * These are the EXACT component names registered by
-           * @silvermine/videojs-chromecast and
-           * @silvermine/videojs-airplay. They were confirmed via
-           * videojs.getComponent() at runtime:
-           *   - "ChromecastButton"  → REGISTERED ✅
-           *   - "AirPlayButton"     → REGISTERED ✅
-           *
-           * Note the capital P in AirPlayButton — 'AirplayButton'
-           * does not exist and video.js silently skips unknown
-           * component names.
-           *
-           * Each button hides itself if its environment isn't
-           * available (Cast button stays hidden in Safari, AirPlay
-           * button stays hidden in Chrome).
-           */
-          'ChromecastButton',
-          'AirPlayButton',
-
           'pictureInPictureToggle',
           'fullscreenToggle',
         ],
@@ -242,6 +217,48 @@ const VideoPlayer = React.forwardRef<
           videoEl.addEventListener('enterpictureinpicture', () => onPipChangeRef.current?.(true));
           videoEl.addEventListener('leavepictureinpicture', () => onPipChangeRef.current?.(false));
         }
+
+        /*
+         * Manually add the Cast + AirPlay buttons.
+         *
+         * We do this here (instead of listing them in controlBar.children)
+         * because the plugin reads its `preloadWebComponents` flag from
+         * the BUTTON's own options — not from the plugin config. Passing
+         * that flag when we create the button is what makes the icon
+         * actually render (without it, the button is created but stays
+         * empty/invisible).
+         *
+         * The setTimeout gives the plugin's per-player initialization a
+         * moment to finish before we insert the buttons.
+         */
+        setTimeout(() => {
+          try {
+            const controlBar = (player as any).controlBar;
+            if (!controlBar) return;
+
+            const insertIndex = Math.max(0, (controlBar.children_()?.length || 0) - 2);
+
+            if (!controlBar.getChild('ChromecastButton')) {
+              controlBar.addChild(
+                'ChromecastButton',
+                { preloadWebComponents: true },
+                insertIndex
+              );
+              console.log('[WorldTV] Cast button added');
+            }
+
+            if (!controlBar.getChild('AirPlayButton') && videojs.browser.IS_SAFARI) {
+              controlBar.addChild(
+                'AirPlayButton',
+                {},
+                insertIndex
+              );
+              console.log('[WorldTV] AirPlay button added');
+            }
+          } catch (e) {
+            console.warn('[WorldTV] Failed to add cast buttons:', e);
+          }
+        }, 300);
       } catch (error) {
         console.warn('[WorldTV] Post-ready setup failed:', error);
       }
