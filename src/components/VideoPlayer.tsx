@@ -7,34 +7,17 @@ import chromecast from '@silvermine/videojs-chromecast';
 import airplay from '@silvermine/videojs-airplay';
 
 // Register the plugins once, at module load time.
-// This must run before any video.js player is created.
 chromecast(videojs);
 airplay(videojs);
 
 interface VideoPlayerProps {
   streamUrl: string;
   channelName: string;
-  /*
-   * Called whenever the underlying <video> enters/leaves
-   * Picture-in-Picture. The App shell uses this to know whether
-   * it's safe to unmount the player when the "modal" is closed —
-   * unmounting while PiP is active would kill the floating window.
-   */
   onPipChange?: (isInPip: boolean) => void;
-  /*
-   * Called whenever the underlying stream actually starts or stops
-   * playing (not just "modal open" — real playback). Used by the
-   * parent App to drive a watch-timer for the timed email gate.
-   */
   onPlayStateChange?: (isPlaying: boolean) => void;
 }
 
 export interface VideoPlayerHandle {
-  /*
-   * Manually request Picture-in-Picture. Exposed so a "Watch in
-   * background" button elsewhere in the UI can trigger the same
-   * floating window the control-bar toggle does.
-   */
   requestPip: () => Promise<void>;
 }
 
@@ -49,17 +32,6 @@ const VideoPlayer = React.forwardRef<
   const onPipChangeRef = useRef(onPipChange);
   const onPlayStateChangeRef = useRef(onPlayStateChange);
 
-  /*
-   * Always-current refs for the active stream/channel. Event handlers
-   * registered on the video.js player (below) live for as long as the
-   * player instance does — which, now that we reuse the same player
-   * across channel switches instead of recreating it, can be much
-   * longer than a single render. Reading these refs at call time
-   * (instead of closing over the `streamUrl`/`channelName` props
-   * directly) keeps retries, logs and Media Session metadata pointed
-   * at whichever channel is actually current, not whichever channel
-   * was current when the player was first created.
-   */
   const streamUrlRef = useRef(streamUrl);
   const channelNameRef = useRef(channelName);
   streamUrlRef.current = streamUrl;
@@ -76,22 +48,12 @@ const VideoPlayer = React.forwardRef<
   React.useImperativeHandle(ref, () => ({
     requestPip: async () => {
       const videoEl = videoRef.current;
-
-      if (!videoEl) {
-        return;
-      }
-
-      if (document.pictureInPictureElement) {
-        return;
-      }
-
+      if (!videoEl) return;
+      if (document.pictureInPictureElement) return;
       try {
         await videoEl.requestPictureInPicture();
       } catch (error) {
-        console.warn(
-          '[WorldTV] requestPictureInPicture failed:',
-          error
-        );
+        console.warn('[WorldTV] requestPictureInPicture failed:', error);
       }
     },
   }));
@@ -106,43 +68,21 @@ const VideoPlayer = React.forwardRef<
   const iframeOriginalParentRef = useRef<Node | null>(null);
   const iframeOriginalNextSiblingRef = useRef<Node | null>(null);
 
-  /*
-   * ----------------------------------------------------------
-   * Pop the YouTube/website iframe out into an always-on-top
-   * floating window (Chrome/Edge desktop only — Document
-   * Picture-in-Picture API). This is the closest desktop
-   * equivalent of the mobile "keep watching while you scroll"
-   * behavior for embedded, cross-origin players that don't
-   * expose their own <video> element for native PiP.
-   * ----------------------------------------------------------
-   */
   const popOutIframe = async () => {
     const wrapper = iframeWrapperRef.current;
     const docPip = (window as any).documentPictureInPicture;
-
-    if (!wrapper || !docPip) {
-      return;
-    }
+    if (!wrapper || !docPip) return;
 
     try {
-      const pipWindow = await docPip.requestWindow({
-        width: 480,
-        height: 270,
-      });
+      const pipWindow = await docPip.requestWindow({ width: 480, height: 270 });
 
-      // Copy over styles so the floating window isn't unstyled.
       Array.from(document.styleSheets).forEach((sheet) => {
         try {
-          const css = Array.from(sheet.cssRules)
-            .map(rule => rule.cssText)
-            .join('');
-
+          const css = Array.from(sheet.cssRules).map(r => r.cssText).join('');
           const style = pipWindow.document.createElement('style');
           style.textContent = css;
           pipWindow.document.head.appendChild(style);
-        } catch (error) {
-          // Cross-origin stylesheets can't be read; skip them.
-        }
+        } catch (e) { /* cross-origin, skip */ }
       });
 
       pipWindow.document.body.style.margin = '0';
@@ -162,95 +102,43 @@ const VideoPlayer = React.forwardRef<
         }
       });
     } catch (error) {
-      console.warn(
-        '[WorldTV] Document Picture-in-Picture failed:',
-        error
-      );
+      console.warn('[WorldTV] Document Picture-in-Picture failed:', error);
     }
   };
 
-  /*
-   * ----------------------------------------------------------
-   * Build proxy URL
-   * ----------------------------------------------------------
-   */
-  const getProxyUrl = (url: string) => {
-    return `/api/proxy?url=${encodeURIComponent(url)}`;
-  };
+  const getProxyUrl = (url: string) => `/api/proxy?url=${encodeURIComponent(url)}`;
 
-  /*
-   * ----------------------------------------------------------
-   * Determine stream type
-   * ----------------------------------------------------------
-   */
   const getStreamType = (url: string) => {
     const lower = url.toLowerCase();
-
-    if (
-      lower.includes('.m3u8') ||
-      lower.includes('playlist.m3u8') ||
-      lower.includes('chunklist')
-    ) {
+    if (lower.includes('.m3u8') || lower.includes('playlist.m3u8') || lower.includes('chunklist')) {
       return 'application/x-mpegURL';
     }
-
-    if (
-      lower.includes('.mp4') ||
-      lower.includes('.m4v')
-    ) {
-      return 'video/mp4';
-    }
-
-    if (
-      lower.includes('.webm')
-    ) {
-      return 'video/webm';
-    }
-
+    if (lower.includes('.mp4') || lower.includes('.m4v')) return 'video/mp4';
+    if (lower.includes('.webm')) return 'video/webm';
     return 'application/x-mpegURL';
   };
 
-  /*
-   * ----------------------------------------------------------
-   * Destroy existing Video.js player
-   * ----------------------------------------------------------
-   */
   const destroyPlayer = () => {
     if (retryTimerRef.current) {
       clearTimeout(retryTimerRef.current);
       retryTimerRef.current = null;
     }
-
     if (playerRef.current) {
-      try {
-        playerRef.current.dispose();
-      } catch (error) {
-        console.warn('Video.js dispose error:', error);
-      }
-
+      try { playerRef.current.dispose(); } catch (e) { console.warn('dispose error:', e); }
       playerRef.current = null;
       onPlayStateChangeRef.current?.(false);
     }
   };
 
-  /*
-   * ----------------------------------------------------------
-   * Create/recreate player
-   * ----------------------------------------------------------
-   */
   const createPlayer = () => {
-    if (!videoRef.current) {
-      return;
-    }
+    if (!videoRef.current) return;
 
     destroyPlayer();
-
     setLoadError(null);
     setIsRetrying(false);
 
     const streamUrl = streamUrlRef.current;
     const channelName = channelNameRef.current;
-
     const proxyUrl = getProxyUrl(streamUrl);
     const streamType = getStreamType(streamUrl);
 
@@ -267,37 +155,12 @@ const VideoPlayer = React.forwardRef<
       responsive: true,
       liveui: true,
       inactivityTimeout: 0,
-
-      /*
-       * Give the Chromecast tech priority so that, when a cast
-       * session is active, video.js routes playback to the
-       * receiver instead of the local <video> element.
-       */
       techOrder: ['chromecast', 'html5'],
 
-      /*
-       * Casting plugins.
-       *
-       * IMPORTANT: `preloadWebComponents` MUST be inside the
-       * chromecast plugin block (not at the top level) — the
-       * plugin reads it from here to decide whether to preload
-       * Google's Cast Web Components. When those components
-       * haven't loaded, the button renders as an empty,
-       * zero-width element, which is why the icon appears
-       * missing.
-       *
-       * `addButtonToControlBar: true` lets the plugin insert
-       * its button into the control bar automatically. We
-       * deliberately do NOT list 'CastButton' / 'AirPlayButton'
-       * in controlBar.children — the component names the
-       * plugins register are NOT the same as those strings,
-       * and unknown names are silently skipped by video.js,
-       * which makes the button disappear.
-       */
       plugins: {
         chromecast: {
           addButtonToControlBar: true,
-          receiver: 'CC1AD845', // Google Default Media Receiver
+          receiver: 'CC1AD845',
           preloadWebComponents: true,
         },
         airPlay: {
@@ -308,48 +171,12 @@ const VideoPlayer = React.forwardRef<
       html5: {
         vhs: {
           enabled: true,
-
-          /*
-           * Start with a smaller rendition where possible.
-           * This makes initial playback more reliable on slower
-           * connections.
-           */
           enableLowInitialPlaylist: true,
-
-          /*
-           * Allow VHS to switch quality while playing.
-           */
           smoothQualityChange: true,
-
-          /*
-           * Use Video.js VHS (Media Source Extensions) instead of
-           * native HLS where possible — EXCEPT on Safari.
-           *
-           * Forcing MSE on Safari was silently breaking AirPlay
-           * ("casting"): AirPlay's picker only works against
-           * Safari's *native* HLS <video> element. Once VHS takes
-           * over via overrideNative, the video's underlying source
-           * becomes a MediaSource object that AirPlay (and the
-           * Google Cast picker, for the same reason) cannot hand
-           * off to another device — the request silently fails.
-           *
-           * Letting Safari use its own native HLS engine keeps
-           * AirPlay working; Chrome/Firefox/Edge still get VHS
-           * since they have no native HLS support to override.
-           */
           overrideNative: !videojs.browser.IS_SAFARI,
-
-          /*
-           * Helps recover from temporary live-stream interruptions.
-           */
           limitRenditionByPlayerDimensions: false,
-
           useDevicePixelRatio: true,
         },
-
-        // Same reasoning as overrideNative above: keep Safari's
-        // native audio/video tracks so AirPlay has a real, native
-        // source to hand off instead of an MSE blob it can't cast.
         nativeAudioTracks: videojs.browser.IS_SAFARI,
         nativeVideoTracks: videojs.browser.IS_SAFARI,
       },
@@ -366,577 +193,270 @@ const VideoPlayer = React.forwardRef<
           'seekToLive',
           'remainingTimeDisplay',
           'playbackRateMenuButton',
-          // NOTE: Cast button and AirPlay button are NOT listed
-          // here on purpose — see the comment above the plugins
-          // block. They are auto-inserted by the plugins.
           'pictureInPictureToggle',
           'fullscreenToggle',
         ],
       },
     });
 
-    /*
-     * --------------------------------------------------------
-     * Native Picture-in-Picture
-     * --------------------------------------------------------
-     *
-     * The `pictureInPictureToggle` control above already wires
-     * this up for the video.js UI. We additionally:
-     *
-     *  - Set Media Session metadata so the floating PiP window
-     *    (and lock screen / notification tray) shows the
-     *    channel name instead of a blank title.
-     *  - Track PiP enter/leave so the parent App can decide
-     *    whether it's safe to unmount the player when the user
-     *    dismisses the modal (see onPipChange prop).
-     */
     player.ready(() => {
       try {
         const videoEl = videoRef.current;
 
-        if (
-          'mediaSession' in navigator &&
-          (navigator as any).mediaSession
-        ) {
+        if ('mediaSession' in navigator && (navigator as any).mediaSession) {
           try {
             (navigator as any).mediaSession.metadata =
               new (window as any).MediaMetadata({
                 title: channelName,
                 artist: 'WorldTV',
               });
-          } catch (error) {
-            console.warn(
-              '[WorldTV] Media Session metadata failed:',
-              error
-            );
-          }
+          } catch (e) { console.warn('[WorldTV] Media Session metadata failed:', e); }
         }
 
         if (videoEl) {
-          videoEl.addEventListener('enterpictureinpicture', () => {
-            onPipChangeRef.current?.(true);
+          videoEl.addEventListener('enterpictureinpicture', () => onPipChangeRef.current?.(true));
+          videoEl.addEventListener('leavepictureinpicture', () => onPipChangeRef.current?.(false));
+        }
+
+        /* ⬅️ DIAGNOSTIC BLOCK — remove after we figure out the cast button */
+        try {
+          console.log('===== CAST DIAGNOSTIC =====');
+          console.log('window.chrome:', typeof (window as any).chrome);
+          console.log('window.chrome.cast:', (window as any).chrome?.cast ? 'present' : 'missing');
+          console.log('chrome.cast.isAvailable:', (window as any).chrome?.cast?.isAvailable);
+          console.log('window.cast:', typeof (window as any).cast);
+          console.log('navigator.userAgent:', navigator.userAgent);
+
+          console.log('Player techName_:', player.techName_);
+          console.log('Player controlBar exists:', !!player.controlBar);
+          console.log('ControlBar children:',
+            player.controlBar?.children_?.map((c: any) => (c.name && c.name()) || c.constructor?.name)
+          );
+
+          // Check what cast-related components are registered
+          const components = ['ChromecastButton', 'CastButton', 'AirPlayButton', 'AirplayButton'];
+          components.forEach(name => {
+            try {
+              const Ctor = (videojs as any).getComponent(name);
+              console.log(`Component "${name}":`, Ctor ? 'REGISTERED' : 'not found');
+            } catch (e) {
+              console.log(`Component "${name}": error checking`, e);
+            }
           });
 
-          videoEl.addEventListener('leavepictureinpicture', () => {
-            onPipChangeRef.current?.(false);
-          });
+          // Try to manually add the Chromecast button
+          try {
+            const Ctor = (videojs as any).getComponent('ChromecastButton');
+            if (Ctor) {
+              const idx = Math.max(0, (player.controlBar.children_?.length || 0) - 2);
+              player.controlBar.addChild('ChromecastButton', {}, idx);
+              console.log('[WorldTV] Manually added ChromecastButton at index', idx);
+            } else {
+              console.warn('[WorldTV] ChromecastButton component NOT registered by plugin');
+            }
+          } catch (e) {
+            console.warn('[WorldTV] Failed to manually add ChromecastButton:', e);
+          }
+
+          console.log('ControlBar children AFTER:',
+            player.controlBar?.children_?.map((c: any) => (c.name && c.name()) || c.constructor?.name)
+          );
+          console.log('===== END CAST DIAGNOSTIC =====');
+        } catch (diagErr) {
+          console.warn('[WorldTV] Cast diagnostic failed:', diagErr);
         }
+        /* ⬅️ END DIAGNOSTIC BLOCK */
+
       } catch (error) {
-        console.warn(
-          '[WorldTV] Post-ready setup (media session / PiP listeners) failed:',
-          error
-        );
+        console.warn('[WorldTV] Post-ready setup failed:', error);
       }
     });
 
     playerRef.current = player;
 
-    /*
-     * --------------------------------------------------------
-     * Player events
-     * --------------------------------------------------------
-     */
-
-    player.on('loadstart', () => {
-      console.log(
-        `[WorldTV] Stream load started: ${channelName}`
-      );
-    });
-
+    player.on('loadstart', () => console.log(`[WorldTV] Stream load started: ${channelName}`));
     player.on('loadedmetadata', () => {
-      console.log(
-        `[WorldTV] Metadata loaded: ${channelName}`
-      );
-
+      console.log(`[WorldTV] Metadata loaded: ${channelName}`);
       setLoadError(null);
       setIsRetrying(false);
     });
-
     player.on('canplay', () => {
-      console.log(
-        `[WorldTV] Stream can play: ${channelName}`
-      );
-
+      console.log(`[WorldTV] Stream can play: ${channelName}`);
       setLoadError(null);
       setIsRetrying(false);
-
       if (player.paused()) {
-        const playPromise = player.play();
-
-        // player.play() is not guaranteed to return a Promise
-        // (depends on browser/state), so guard before chaining.
-        if (playPromise !== undefined) {
-          playPromise.catch((error: any) => {
-            console.warn(
-              '[WorldTV] Playback requires user interaction:',
-              error
-            );
-          });
-        }
+        const p = player.play();
+        if (p !== undefined) p.catch((e: any) => console.warn('[WorldTV] Play blocked:', e));
       }
     });
-
     player.on('playing', () => {
-      console.log(
-        `[WorldTV] Playback started: ${channelName}`
-      );
-
+      console.log(`[WorldTV] Playback started: ${channelName}`);
       retryCountRef.current = 0;
       setLoadError(null);
       setIsRetrying(false);
       onPlayStateChangeRef.current?.(true);
     });
-
-    player.on('pause', () => {
-      onPlayStateChangeRef.current?.(false);
-    });
-
-    player.on('waiting', () => {
-      console.log(
-        `[WorldTV] Buffering: ${channelName}`
-      );
-    });
-
-    player.on('stalled', () => {
-      console.warn(
-        `[WorldTV] Stream stalled: ${channelName}`
-      );
-    });
-
-    player.on('ended', () => {
-      console.warn(
-        `[WorldTV] Stream ended: ${channelName}`
-      );
-
-      scheduleRetry();
-    });
-
+    player.on('pause', () => onPlayStateChangeRef.current?.(false));
+    player.on('waiting', () => console.log(`[WorldTV] Buffering: ${channelName}`));
+    player.on('stalled', () => console.warn(`[WorldTV] Stream stalled: ${channelName}`));
+    player.on('ended', () => { console.warn(`[WorldTV] Stream ended: ${channelName}`); scheduleRetry(); });
     player.on('error', () => {
-      const error = player.error();
-
-      console.error(
-        '[WorldTV] Video.js error:',
-        error
-      );
-
+      console.error('[WorldTV] Video.js error:', player.error());
       scheduleRetry();
     });
-
-    /*
-     * --------------------------------------------------------
-     * VHS-specific error handling
-     * --------------------------------------------------------
-     */
-    player.on('xhr-error', (event: any) => {
-      console.warn(
-        '[WorldTV] VHS/XHR error:',
-        event
-      );
-
-      /*
-       * Do not immediately destroy the player.
-       *
-       * Live HLS streams frequently have temporary failed
-       * segment requests. VHS can often recover by itself.
-       */
-    });
-
-    /*
-     * --------------------------------------------------------
-     * Set source
-     * --------------------------------------------------------
-     */
+    player.on('xhr-error', (event: any) => console.warn('[WorldTV] VHS/XHR error:', event));
 
     try {
-      player.src({
-        src: proxyUrl,
-        type: streamType,
-      });
-
+      player.src({ src: proxyUrl, type: streamType });
       player.ready(() => {
-        console.log(
-          `[WorldTV] Player ready: ${channelName}`
-        );
-
-        const playPromise = player.play();
-
-        // Guard here too — same reasoning as above.
-        if (playPromise !== undefined) {
-          playPromise
-            .then(() => {
-              console.log(
-                `[WorldTV] Autoplay successful: ${channelName}`
-              );
-            })
-            .catch((error: any) => {
-              console.warn(
-                '[WorldTV] Autoplay prevented:',
-                error
-              );
-
-              /*
-               * Muted autoplay is attempted first.
-               * If the browser still blocks it, the user can
-               * press the normal play button.
-               */
-            });
+        console.log(`[WorldTV] Player ready: ${channelName}`);
+        const p = player.play();
+        if (p !== undefined) {
+          p.then(() => console.log(`[WorldTV] Autoplay successful: ${channelName}`))
+           .catch((e: any) => console.warn('[WorldTV] Autoplay prevented:', e));
         }
       });
     } catch (error) {
-      console.error(
-        '[WorldTV] Failed to initialize player:',
-        error
-      );
-
-      setLoadError(
-        'Unable to initialize this stream.'
-      );
+      console.error('[WorldTV] Failed to initialize player:', error);
+      setLoadError('Unable to initialize this stream.');
     }
   };
 
-  /*
-   * ----------------------------------------------------------
-   * Switch the CURRENT player to a new channel's source, without
-   * disposing and recreating the player.
-   *
-   * This is what fixes "Watch in background" not following a
-   * channel change: disposing the player removes the underlying
-   * <video> element from the DOM, and removing an element that's
-   * in native Picture-in-Picture ends (or freezes) that floating
-   * window. As long as a player already exists, every channel
-   * switch should come through here instead of createPlayer(), so
-   * the same <video> element — and any active PiP session on it —
-   * stays alive and simply starts showing the new channel.
-   * ----------------------------------------------------------
-   */
   const updateSource = () => {
     const player = playerRef.current;
+    if (!player) return;
 
-    if (!player) {
-      return;
-    }
-
-    if (retryTimerRef.current) {
-      clearTimeout(retryTimerRef.current);
-      retryTimerRef.current = null;
-    }
-
+    if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null; }
     retryCountRef.current = 0;
     setLoadError(null);
     setIsRetrying(false);
 
     const streamUrl = streamUrlRef.current;
     const channelName = channelNameRef.current;
-
     const proxyUrl = getProxyUrl(streamUrl);
     const streamType = getStreamType(streamUrl);
 
-    console.log(
-      `[WorldTV] Switching channel (player reused): ${channelName}`
-    );
+    console.log(`[WorldTV] Switching channel (player reused): ${channelName}`);
 
     try {
-      player.src({
-        src: proxyUrl,
-        type: streamType,
-      });
-
-      if (
-        'mediaSession' in navigator &&
-        (navigator as any).mediaSession
-      ) {
+      player.src({ src: proxyUrl, type: streamType });
+      if ('mediaSession' in navigator && (navigator as any).mediaSession) {
         try {
           (navigator as any).mediaSession.metadata =
-            new (window as any).MediaMetadata({
-              title: channelName,
-              artist: 'WorldTV',
-            });
-        } catch (error) {
-          console.warn(
-            '[WorldTV] Media Session metadata update failed:',
-            error
-          );
-        }
+            new (window as any).MediaMetadata({ title: channelName, artist: 'WorldTV' });
+        } catch (e) { console.warn('[WorldTV] Media Session update failed:', e); }
       }
-
-      const playPromise = player.play();
-
-      if (playPromise !== undefined) {
-        playPromise.catch((error: any) => {
-          console.warn(
-            '[WorldTV] Autoplay prevented after channel switch:',
-            error
-          );
-        });
-      }
+      const p = player.play();
+      if (p !== undefined) p.catch((e: any) => console.warn('[WorldTV] Autoplay prevented after switch:', e));
     } catch (error) {
-      console.error(
-        '[WorldTV] Failed to switch channel source:',
-        error
-      );
-
+      console.error('[WorldTV] Failed to switch source:', error);
       setLoadError('Unable to load this stream.');
     }
   };
 
-  /*
-   * ----------------------------------------------------------
-   * Retry logic
-   * ----------------------------------------------------------
-   */
   const scheduleRetry = () => {
-    if (retryTimerRef.current) {
-      return;
-    }
-
+    if (retryTimerRef.current) return;
     const retryNumber = retryCountRef.current + 1;
-
-    /*
-     * Maximum automatic retries.
-     *
-     * We do not retry forever because some channels really
-     * are offline.
-     */
     if (retryNumber > 5) {
-      console.error(
-        `[WorldTV] Maximum retries reached: ${channelNameRef.current}`
-      );
-
+      console.error(`[WorldTV] Max retries reached: ${channelNameRef.current}`);
       setIsRetrying(false);
-      setLoadError(
-        'This stream is currently unavailable. Please try again.'
-      );
-
+      setLoadError('This stream is currently unavailable. Please try again.');
       return;
     }
-
     retryCountRef.current = retryNumber;
-
-    /*
-     * Exponential-ish backoff:
-     *
-     * retry 1 = 2 seconds
-     * retry 2 = 4 seconds
-     * retry 3 = 6 seconds
-     * retry 4 = 8 seconds
-     * retry 5 = 10 seconds
-     */
-    const delay = Math.min(
-      retryNumber * 2000,
-      10000
-    );
-
-    console.log(
-      `[WorldTV] Retrying ${channelNameRef.current} in ${delay}ms`
-    );
-
+    const delay = Math.min(retryNumber * 2000, 10000);
+    console.log(`[WorldTV] Retrying in ${delay}ms`);
     setIsRetrying(true);
-
     retryTimerRef.current = setTimeout(() => {
       retryTimerRef.current = null;
-
-      if (!videoRef.current) {
-        return;
-      }
-
+      if (!videoRef.current) return;
       createPlayer();
     }, delay);
   };
 
-  /*
-   * ----------------------------------------------------------
-   * Manual retry
-   * ----------------------------------------------------------
-   */
   const retryNow = () => {
     retryCountRef.current = 0;
-
     setLoadError(null);
     setIsRetrying(false);
-
     createPlayer();
   };
 
-  /*
-   * ----------------------------------------------------------
-   * Main stream effect
-   * ----------------------------------------------------------
-   */
   useEffect(() => {
     setIsWebsite(false);
     setIframeUrl('');
     setLoadError(null);
     setIframeFailed(false);
     setIsRetrying(false);
-
     retryCountRef.current = 0;
 
     if (!streamUrl) {
-      setLoadError(
-        'No stream URL is available for this channel.'
-      );
-
+      setLoadError('No stream URL is available for this channel.');
       return;
     }
 
     const url = streamUrl.toLowerCase();
-
-    /*
-     * --------------------------------------------------------
-     * YouTube
-     * --------------------------------------------------------
-     */
 
     if (
       url.includes('youtube.com/watch') ||
       url.includes('youtu.be/') ||
       url.includes('youtube.com/live/')
     ) {
-      // Switching to an embedded website/YouTube view — any existing
-      // video.js player (and its <video> element) is no longer needed.
       destroyPlayer();
-
       setIsWebsite(true);
 
       let videoId = '';
-
       try {
         const parsed = new URL(streamUrl);
-
-        if (
-          parsed.hostname.includes('youtu.be')
-        ) {
-          videoId =
-            parsed.pathname
-              .replace(/^\/+/, '')
-              .split('/')[0] || '';
-        } else if (
-          parsed.pathname.includes('/live/')
-        ) {
-          videoId =
-            parsed.pathname
-              .split('/live/')[1]
-              ?.split('/')[0]
-              ?.split('?')[0] || '';
+        if (parsed.hostname.includes('youtu.be')) {
+          videoId = parsed.pathname.replace(/^\/+/, '').split('/')[0] || '';
+        } else if (parsed.pathname.includes('/live/')) {
+          videoId = parsed.pathname.split('/live/')[1]?.split('/')[0]?.split('?')[0] || '';
         } else {
-          videoId =
-            parsed.searchParams.get('v') || '';
+          videoId = parsed.searchParams.get('v') || '';
         }
-      } catch (error) {
-        console.warn(
-          '[WorldTV] Could not parse YouTube URL:',
-          error
-        );
-      }
+      } catch (e) { console.warn('[WorldTV] Could not parse YouTube URL:', e); }
 
       if (videoId) {
-        setIframeUrl(
-          `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&mute=0&rel=0`
-        );
+        setIframeUrl(`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&mute=0&rel=0`);
       } else {
         setIframeUrl(streamUrl);
       }
-
       return;
     }
 
-    /*
-     * --------------------------------------------------------
-     * Everything else is treated as a media stream.
-     * --------------------------------------------------------
-     */
-
     const timer = setTimeout(() => {
-      if (playerRef.current) {
-        // A player already exists (this is a channel switch, not the
-        // first load) — reuse it so any active native Picture-in-
-        // Picture session stays alive. See updateSource() above.
-        updateSource();
-      } else {
-        createPlayer();
-      }
+      if (playerRef.current) updateSource();
+      else createPlayer();
     }, 0);
 
-    return () => {
-      clearTimeout(timer);
-      // NOTE: intentionally NOT calling destroyPlayer() here anymore.
-      // This cleanup used to run (and dispose the player) on every
-      // single channel switch, which tore down the <video> element
-      // and killed "Watch in background" every time. The player is
-      // now only disposed when this component actually unmounts (see
-      // the effect below) or when switching to the website/iframe
-      // view (see destroyPlayer() call above).
-    };
-
+    return () => { clearTimeout(timer); };
   }, [streamUrl, channelName]);
 
-  /*
-   * ----------------------------------------------------------
-   * True unmount only: dispose the player when this component is
-   * actually removed from the tree, not on every channel switch.
-   * ----------------------------------------------------------
-   */
   useEffect(() => {
-    return () => {
-      destroyPlayer();
-    };
+    return () => { destroyPlayer(); };
     // eslint-disable-next-line
   }, []);
 
-  /*
-   * ----------------------------------------------------------
-   * Poster
-   * ----------------------------------------------------------
-   */
-
   const posterImage =
     `data:image/svg+xml,` +
-    `<svg xmlns="http://www.w3.org/2000/svg" ` +
-    `width="1280" height="720">` +
+    `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720">` +
     `<rect width="100%" height="100%" fill="#111827"/>` +
-    `<text x="50%" y="50%" ` +
-    `font-family="Arial,sans-serif" ` +
-    `font-size="32" ` +
-    `fill="#9ca3af" ` +
-    `text-anchor="middle" ` +
-    `dominant-baseline="middle">` +
-    `${encodeURIComponent(channelName)}` +
-    `</text>` +
-    `</svg>`;
-
-  /*
-   * ----------------------------------------------------------
-   * Website / YouTube player
-   * ----------------------------------------------------------
-   */
+    `<text x="50%" y="50%" font-family="Arial,sans-serif" font-size="32" ` +
+    `fill="#9ca3af" text-anchor="middle" dominant-baseline="middle">` +
+    `${encodeURIComponent(channelName)}</text></svg>`;
 
   if (isWebsite) {
     if (iframeFailed) {
       return (
         <div className="bg-gray-900 rounded-lg p-8 text-center">
-          <div className="text-yellow-400 text-4xl mb-4">
-            🔒
-          </div>
-
-          <div className="text-white text-lg mb-2">
-            This website blocks embedded viewing
-          </div>
-
+          <div className="text-yellow-400 text-4xl mb-4">🔒</div>
+          <div className="text-white text-lg mb-2">This website blocks embedded viewing</div>
           <div className="text-gray-400 text-sm mb-4">
-            {channelName} prevents its stream from being
-            shown in an iframe.
-            <br />
+            {channelName} prevents its stream from being shown in an iframe.<br />
             Click below to open it directly.
           </div>
-
           <button
-            onClick={() =>
-              window.open(
-                streamUrl,
-                '_blank',
-                'noopener,noreferrer'
-              )
-            }
+            onClick={() => window.open(streamUrl, '_blank', 'noopener,noreferrer')}
             className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition text-lg font-semibold"
           >
             Open {channelName} in New Tab ↗
@@ -949,10 +469,7 @@ const VideoPlayer = React.forwardRef<
       <div
         ref={iframeWrapperRef}
         className="relative bg-black rounded-lg overflow-hidden"
-        style={{
-          paddingBottom: '56.25%',
-          height: 0,
-        }}
+        style={{ paddingBottom: '56.25%', height: 0 }}
       >
         <iframe
           src={iframeUrl}
@@ -961,33 +478,24 @@ const VideoPlayer = React.forwardRef<
           allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
           allowFullScreen
           sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
-          style={{
-            border: 'none',
-          }}
+          style={{ border: 'none' }}
           loading="eager"
           onError={() => setIframeFailed(true)}
         />
 
         <div className="absolute bottom-4 right-4 z-10 flex gap-2">
-          {typeof window !== 'undefined' &&
-            'documentPictureInPicture' in window && (
-              <button
-                onClick={popOutIframe}
-                className="bg-gray-800/90 hover:bg-gray-700 text-white px-3 py-1.5 rounded text-sm transition flex items-center gap-1"
-                title="Float this player in a window on top of everything else"
-              >
-                Float window ⧉
-              </button>
-            )}
+          {typeof window !== 'undefined' && 'documentPictureInPicture' in window && (
+            <button
+              onClick={popOutIframe}
+              className="bg-gray-800/90 hover:bg-gray-700 text-white px-3 py-1.5 rounded text-sm transition flex items-center gap-1"
+              title="Float this player in a window on top of everything else"
+            >
+              Float window ⧉
+            </button>
+          )}
 
           <button
-            onClick={() =>
-              window.open(
-                streamUrl,
-                '_blank',
-                'noopener,noreferrer'
-              )
-            }
+            onClick={() => window.open(streamUrl, '_blank', 'noopener,noreferrer')}
             className="bg-gray-800/90 hover:bg-gray-700 text-white px-3 py-1.5 rounded text-sm transition flex items-center gap-1"
           >
             Open in new tab ↗
@@ -997,33 +505,13 @@ const VideoPlayer = React.forwardRef<
     );
   }
 
-  /*
-   * ----------------------------------------------------------
-   * Stream error
-   * ----------------------------------------------------------
-   */
-
   if (loadError) {
     return (
       <div className="bg-gray-900 rounded-lg p-8 text-center">
-        <div className="text-red-400 text-4xl mb-4">
-          ⚠️
-        </div>
-
-        <div className="text-white text-lg mb-2">
-          {loadError}
-        </div>
-
-        {isRetrying && (
-          <div className="text-yellow-400 text-sm mb-4">
-            Attempting to reconnect…
-          </div>
-        )}
-
-        <div className="text-gray-500 text-xs mb-5 break-all">
-          {streamUrl}
-        </div>
-
+        <div className="text-red-400 text-4xl mb-4">⚠️</div>
+        <div className="text-white text-lg mb-2">{loadError}</div>
+        {isRetrying && (<div className="text-yellow-400 text-sm mb-4">Attempting to reconnect…</div>)}
+        <div className="text-gray-500 text-xs mb-5 break-all">{streamUrl}</div>
         <div className="flex justify-center gap-3 flex-wrap">
           <button
             onClick={retryNow}
@@ -1031,15 +519,8 @@ const VideoPlayer = React.forwardRef<
           >
             Try Again
           </button>
-
           <button
-            onClick={() =>
-              window.open(
-                streamUrl,
-                '_blank',
-                'noopener,noreferrer'
-              )
-            }
+            onClick={() => window.open(streamUrl, '_blank', 'noopener,noreferrer')}
             className="bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-lg transition font-semibold"
           >
             Open Stream ↗
@@ -1049,24 +530,14 @@ const VideoPlayer = React.forwardRef<
     );
   }
 
-  /*
-   * ----------------------------------------------------------
-   * Video.js player
-   * ----------------------------------------------------------
-   */
-
   return (
-    <div
-      data-vjs-player
-      className="bg-black rounded-lg overflow-hidden relative"
-    >
+    <div data-vjs-player className="bg-black rounded-lg overflow-hidden relative">
       <video
         ref={videoRef}
         className="video-js vjs-big-play-centered vjs-theme-city"
         poster={posterImage}
         playsInline
       />
-
       {isRetrying && (
         <div className="absolute top-3 left-3 z-20 bg-black/75 text-white text-sm px-3 py-2 rounded">
           Reconnecting…
