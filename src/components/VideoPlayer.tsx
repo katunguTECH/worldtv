@@ -2,6 +2,15 @@ import React, { useEffect, useRef, useState } from 'react';
 import videojs from 'video.js';
 import 'video.js/dist/video-js.css';
 
+// ⬅️ import the Silvermine casting plugins
+import chromecast from '@silvermine/videojs-chromecast';
+import airplay from '@silvermine/videojs-airplay';
+
+// ⬅️ register the plugins once, at module load time.
+// This must run before any video.js player is created.
+chromecast(videojs);
+airplay(videojs);
+
 interface VideoPlayerProps {
   streamUrl: string;
   channelName: string;
@@ -29,148 +38,6 @@ export interface VideoPlayerHandle {
   requestPip: () => Promise<void>;
 }
 
-/*
- * ================================================================
- * CASTING SUPPORT (Chromecast + AirPlay)
- * ================================================================
- *
- * Both of these ride on standard browser APIs, so no external SDK
- * or Chromecast receiver app registration is required:
- *
- * - Chromecast / Google Cast: the W3C Remote Playback API
- *   (`videoEl.remote.prompt()`), supported by Chrome/Edge on
- *   desktop + Android. This is the same mechanism that powers the
- *   native cast icon Chrome sometimes shows on <video> elements.
- *
- * - AirPlay: Safari's `webkitShowPlaybackTargetPicker()`,
- *   supported on macOS/iOS Safari.
- *
- * A device only shows up in either picker if it's actually on the
- * same network, so there's nothing else to configure server-side.
- * ================================================================
- */
-
-const supportsRemotePlayback =
-  typeof window !== 'undefined' &&
-  typeof HTMLMediaElement !== 'undefined' &&
-  'remote' in HTMLMediaElement.prototype;
-
-const supportsAirPlay =
-  typeof window !== 'undefined' &&
-  typeof (window as any).WebKitPlaybackTargetAvailabilityEvent !==
-    'undefined';
-
-let castButtonsRegistered = false;
-
-function registerCastButtons() {
-  if (castButtonsRegistered) {
-    return;
-  }
-
-  castButtonsRegistered = true;
-
-  const Button = videojs.getComponent('Button');
-
-  class CastButton extends (Button as any) {
-    constructor(player: any, options: any) {
-      super(
-        player,
-        Object.assign({}, options, { controlText: 'Cast to TV' })
-      );
-
-      this.addClass('vjs-cast-button');
-
-      if (!supportsRemotePlayback) {
-        this.hide();
-      }
-    }
-
-    /*
-     * Let video.js build its normal button markup (this is what
-     * sets up controlTextEl_, which the base Button class relies
-     * on internally — replacing the markup wholesale, like an
-     * earlier version of this code did, breaks that and crashes
-     * the player). We only reach in and swap the icon glyph.
-     */
-    createEl(tag: any, props: any, attributes: any) {
-      const el = super.createEl(tag, props, attributes);
-
-      const iconPlaceholder = el.querySelector(
-        '.vjs-icon-placeholder'
-      );
-
-      if (iconPlaceholder) {
-        iconPlaceholder.innerHTML =
-          '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">' +
-          '<path d="M1 18v3h3c0-1.66-1.34-3-3-3zm0-4v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7zm18-7H5v1.63c3.96 1.28 7.09 4.41 8.37 8.37H19V7zM1 10v2c4.97 0 9 4.03 9 9h2c0-6.08-4.93-11-11-11zm20-7H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/>' +
-          '</svg>';
-      }
-
-      return el;
-    }
-
-    handleClick() {
-      const videoEl = this.player().tech().el();
-
-      if (videoEl && (videoEl as any).remote && (videoEl as any).remote.prompt) {
-        (videoEl as any).remote.prompt().catch((error: any) => {
-          console.warn(
-            '[WorldTV] Cast prompt failed or was dismissed:',
-            error
-          );
-        });
-      }
-    }
-  }
-
-  class AirPlayButton extends (Button as any) {
-    constructor(player: any, options: any) {
-      super(
-        player,
-        Object.assign({}, options, { controlText: 'AirPlay' })
-      );
-
-      this.addClass('vjs-airplay-button');
-
-      if (!supportsAirPlay) {
-        this.hide();
-      }
-    }
-
-    createEl(tag: any, props: any, attributes: any) {
-      const el = super.createEl(tag, props, attributes);
-
-      const iconPlaceholder = el.querySelector(
-        '.vjs-icon-placeholder'
-      );
-
-      if (iconPlaceholder) {
-        iconPlaceholder.innerHTML =
-          '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">' +
-          '<path d="M6 22h12l-6-6z"/>' +
-          '<path d="M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h4v-2H3V5h18v14h-4v2h4c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/>' +
-          '</svg>';
-      }
-
-      return el;
-    }
-
-    handleClick() {
-      const videoEl = this.player().tech().el() as any;
-
-      if (videoEl && videoEl.webkitShowPlaybackTargetPicker) {
-        videoEl.webkitShowPlaybackTargetPicker();
-      }
-    }
-  }
-
-
-  videojs.registerComponent('CastButton', CastButton as any);
-  videojs.registerComponent('AirPlayButton', AirPlayButton as any);
-}
-
-registerCastButtons();
-
 const VideoPlayer = React.forwardRef<
   VideoPlayerHandle,
   VideoPlayerProps
@@ -187,8 +54,8 @@ const VideoPlayer = React.forwardRef<
    * registered on the video.js player (below) live for as long as the
    * player instance does — which, now that we reuse the same player
    * across channel switches instead of recreating it, can be much
-   * longer than a single render. Reading these refs at call time (
-   * instead of closing over the `streamUrl`/`channelName` props
+   * longer than a single render. Reading these refs at call time
+   * (instead of closing over the `streamUrl`/`channelName` props
    * directly) keeps retries, logs and Media Session metadata pointed
    * at whichever channel is actually current, not whichever channel
    * was current when the player was first created.
@@ -394,12 +261,49 @@ const VideoPlayer = React.forwardRef<
     const player = videojs(videoRef.current, {
       controls: true,
       autoplay: true,
-      muted: false, // CHANGED: from true to false - volume is now on by default
+      muted: false,
       preload: 'auto',
       fluid: true,
       responsive: true,
       liveui: true,
       inactivityTimeout: 0,
+
+      /*
+       * Give the Chromecast tech priority so that, when a cast
+       * session is active, video.js routes playback to the
+       * receiver instead of the local <video> element.
+       */
+      techOrder: ['chromecast', 'html5'],
+
+      /*
+       * Tells the plugin to load Google's Cast Web Components
+       * early (before user interaction) so the cast button
+       * appears reliably in Chrome/Edge/Android.
+       */
+      preloadWebComponents: true,
+
+      plugins: {
+        chromecast: {
+          /*
+           * ⬅️ CHANGED: false (was true).
+           *
+           * We now list 'CastButton' explicitly in
+           * controlBar.children below. Leaving addButtonToControlBar
+           * as true would create a SECOND cast button (the plugin
+           * would add one, and the control bar would add another).
+           */
+          addButtonToControlBar: false,
+
+          // Google's Default Media Receiver. Understands HLS, MP4
+          // and most live streams out of the box.
+          receiver: 'CC1AD845',
+        },
+        airPlay: {
+          // ⬅️ CHANGED: false (was true). Same reasoning as above —
+          // 'AirPlayButton' is now listed in controlBar.children.
+          addButtonToControlBar: false,
+        },
+      },
 
       html5: {
         vhs: {
@@ -422,16 +326,16 @@ const VideoPlayer = React.forwardRef<
            * native HLS where possible — EXCEPT on Safari.
            *
            * Forcing MSE on Safari was silently breaking AirPlay
-           * ("casting"): AirPlay's webkitShowPlaybackTargetPicker()
-           * only works against Safari's *native* HLS <video> element.
-           * Once VHS takes over via overrideNative, the video's
-           * underlying source becomes a MediaSource object that
-           * AirPlay (and the Remote Playback / Chromecast picker,
-           * for the same reason) cannot hand off to another device —
-           * the request silently fails. Letting Safari use its own
-           * native HLS engine keeps AirPlay working; Chrome/Firefox/
-           * Edge still get VHS since they have no native HLS support
-           * to override in the first place.
+           * ("casting"): AirPlay's picker only works against
+           * Safari's *native* HLS <video> element. Once VHS takes
+           * over via overrideNative, the video's underlying source
+           * becomes a MediaSource object that AirPlay (and the
+           * Google Cast picker, for the same reason) cannot hand
+           * off to another device — the request silently fails.
+           *
+           * Letting Safari use its own native HLS engine keeps
+           * AirPlay working; Chrome/Firefox/Edge still get VHS
+           * since they have no native HLS support to override.
            */
           overrideNative: !videojs.browser.IS_SAFARI,
 
@@ -443,9 +347,9 @@ const VideoPlayer = React.forwardRef<
           useDevicePixelRatio: true,
         },
 
-        // Same reasoning as overrideNative above: keep Safari's native
-        // audio/video tracks so AirPlay has a real, native source to
-        // hand off instead of an MSE blob it can't cast.
+        // Same reasoning as overrideNative above: keep Safari's
+        // native audio/video tracks so AirPlay has a real, native
+        // source to hand off instead of an MSE blob it can't cast.
         nativeAudioTracks: videojs.browser.IS_SAFARI,
         nativeVideoTracks: videojs.browser.IS_SAFARI,
       },
@@ -462,8 +366,26 @@ const VideoPlayer = React.forwardRef<
           'seekToLive',
           'remainingTimeDisplay',
           'playbackRateMenuButton',
-          'castButton',
-          'airPlayButton',
+
+          /*
+           * ⬅️ CHANGED: Added the casting buttons here.
+           *
+           * When `controlBar.children` is defined, video.js builds
+           * the control bar using ONLY that array. It ignores
+           * anything plugins try to auto-insert via
+           * `addButtonToControlBar`. So the cast buttons have to be
+           * named explicitly.
+           *
+           * 'CastButton' and 'AirPlayButton' are the component
+           * names registered by @silvermine/videojs-chromecast and
+           * @silvermine/videojs-airplay respectively. Each button
+           * hides itself automatically if its API isn't available
+           * (e.g. AirPlay button stays hidden in Chrome, Cast
+           * button stays hidden in Safari).
+           */
+          'CastButton',
+          'AirPlayButton',
+
           'pictureInPictureToggle',
           'fullscreenToggle',
         ],
@@ -474,16 +396,6 @@ const VideoPlayer = React.forwardRef<
      * --------------------------------------------------------
      * Native Picture-in-Picture (mobile "floating over other
      * apps" behavior, same as YouTube's mini player).
-     *
-     * The `pictureInPictureToggle` control above already wires
-     * this up for the video.js UI. We additionally:
-     *
-     *  - Set Media Session metadata so the floating PiP window
-     *    (and lock screen / notification tray) shows the
-     *    channel name instead of a blank title.
-     *  - Track PiP enter/leave so the parent App can decide
-     *    whether it's safe to unmount the player when the user
-     *    dismisses the modal (see onPipChange prop).
      * --------------------------------------------------------
      */
 
@@ -805,7 +717,7 @@ const VideoPlayer = React.forwardRef<
      */
     if (retryNumber > 5) {
       console.error(
-        `[WorldTV] Maximum retries reached: ${channelName}`
+        `[WorldTV] Maximum retries reached: ${channelNameRef.current}`
       );
 
       setIsRetrying(false);
@@ -833,7 +745,7 @@ const VideoPlayer = React.forwardRef<
     );
 
     console.log(
-      `[WorldTV] Retrying ${channelName} in ${delay}ms`
+      `[WorldTV] Retrying ${channelNameRef.current} in ${delay}ms`
     );
 
     setIsRetrying(true);
@@ -937,7 +849,7 @@ const VideoPlayer = React.forwardRef<
 
       if (videoId) {
         setIframeUrl(
-          `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&mute=0&rel=0` // CHANGED: from mute=1 to mute=0
+          `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&mute=0&rel=0`
         );
       } else {
         setIframeUrl(streamUrl);
@@ -974,7 +886,6 @@ const VideoPlayer = React.forwardRef<
       // view (see destroyPlayer() call above).
     };
 
-  
   }, [streamUrl, channelName]);
 
   /*

@@ -59,5 +59,17 @@
   </noscript>
 
   <div id="root"></div>
+
+  <!--
+    ============================================================
+    GOOGLE CAST SENDER FRAMEWORK
+    ============================================================
+    Required by @silvermine/videojs-chromecast.
+    Must load BEFORE the React bundle so the Cast framework
+    is ready when the plugin initializes (video.js player is
+    created inside VideoPlayer.tsx).
+    ============================================================
+  -->
+  <script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
 </body>
 </html>
