@@ -236,7 +236,7 @@ const VideoPlayer = React.forwardRef<
             const controlBar = (player as any).controlBar;
             if (!controlBar) return;
 
-            const insertIndex = Math.max(0, (controlBar.children_()?.length || 0) - 2);
+            const insertIndex = Math.max(0, (controlBar.children()?.length || 0) - 2);
 
             if (!controlBar.getChild('ChromecastButton')) {
               controlBar.addChild(
