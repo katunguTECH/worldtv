@@ -182,6 +182,22 @@ const VideoPlayer = React.forwardRef<
   const onPipChangeRef = useRef(onPipChange);
   const onPlayStateChangeRef = useRef(onPlayStateChange);
 
+  /*
+   * Always-current refs for the active stream/channel. Event handlers
+   * registered on the video.js player (below) live for as long as the
+   * player instance does — which, now that we reuse the same player
+   * across channel switches instead of recreating it, can be much
+   * longer than a single render. Reading these refs at call time (
+   * instead of closing over the `streamUrl`/`channelName` props
+   * directly) keeps retries, logs and Media Session metadata pointed
+   * at whichever channel is actually current, not whichever channel
+   * was current when the player was first created.
+   */
+  const streamUrlRef = useRef(streamUrl);
+  const channelNameRef = useRef(channelName);
+  streamUrlRef.current = streamUrl;
+  channelNameRef.current = channelName;
+
   useEffect(() => {
     onPipChangeRef.current = onPipChange;
   }, [onPipChange]);
@@ -365,6 +381,9 @@ const VideoPlayer = React.forwardRef<
     setLoadError(null);
     setIsRetrying(false);
 
+    const streamUrl = streamUrlRef.current;
+    const channelName = channelNameRef.current;
+
     const proxyUrl = getProxyUrl(streamUrl);
     const streamType = getStreamType(streamUrl);
 
@@ -399,9 +418,22 @@ const VideoPlayer = React.forwardRef<
           smoothQualityChange: true,
 
           /*
-           * Use Video.js VHS instead of native HLS where possible.
+           * Use Video.js VHS (Media Source Extensions) instead of
+           * native HLS where possible — EXCEPT on Safari.
+           *
+           * Forcing MSE on Safari was silently breaking AirPlay
+           * ("casting"): AirPlay's webkitShowPlaybackTargetPicker()
+           * only works against Safari's *native* HLS <video> element.
+           * Once VHS takes over via overrideNative, the video's
+           * underlying source becomes a MediaSource object that
+           * AirPlay (and the Remote Playback / Chromecast picker,
+           * for the same reason) cannot hand off to another device —
+           * the request silently fails. Letting Safari use its own
+           * native HLS engine keeps AirPlay working; Chrome/Firefox/
+           * Edge still get VHS since they have no native HLS support
+           * to override in the first place.
            */
-          overrideNative: true,
+          overrideNative: !videojs.browser.IS_SAFARI,
 
           /*
            * Helps recover from temporary live-stream interruptions.
@@ -411,8 +443,11 @@ const VideoPlayer = React.forwardRef<
           useDevicePixelRatio: true,
         },
 
-        nativeAudioTracks: false,
-        nativeVideoTracks: false,
+        // Same reasoning as overrideNative above: keep Safari's native
+        // audio/video tracks so AirPlay has a real, native source to
+        // hand off instead of an MSE blob it can't cast.
+        nativeAudioTracks: videojs.browser.IS_SAFARI,
+        nativeVideoTracks: videojs.browser.IS_SAFARI,
       },
 
       controlBar: {
@@ -667,6 +702,91 @@ const VideoPlayer = React.forwardRef<
 
   /*
    * ----------------------------------------------------------
+   * Switch the CURRENT player to a new channel's source, without
+   * disposing and recreating the player.
+   *
+   * This is what fixes "Watch in background" not following a
+   * channel change: disposing the player removes the underlying
+   * <video> element from the DOM, and removing an element that's
+   * in native Picture-in-Picture ends (or freezes) that floating
+   * window. As long as a player already exists, every channel
+   * switch should come through here instead of createPlayer(), so
+   * the same <video> element — and any active PiP session on it —
+   * stays alive and simply starts showing the new channel.
+   * ----------------------------------------------------------
+   */
+  const updateSource = () => {
+    const player = playerRef.current;
+
+    if (!player) {
+      return;
+    }
+
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
+
+    retryCountRef.current = 0;
+    setLoadError(null);
+    setIsRetrying(false);
+
+    const streamUrl = streamUrlRef.current;
+    const channelName = channelNameRef.current;
+
+    const proxyUrl = getProxyUrl(streamUrl);
+    const streamType = getStreamType(streamUrl);
+
+    console.log(
+      `[WorldTV] Switching channel (player reused): ${channelName}`
+    );
+
+    try {
+      player.src({
+        src: proxyUrl,
+        type: streamType,
+      });
+
+      if (
+        'mediaSession' in navigator &&
+        (navigator as any).mediaSession
+      ) {
+        try {
+          (navigator as any).mediaSession.metadata =
+            new (window as any).MediaMetadata({
+              title: channelName,
+              artist: 'WorldTV',
+            });
+        } catch (error) {
+          console.warn(
+            '[WorldTV] Media Session metadata update failed:',
+            error
+          );
+        }
+      }
+
+      const playPromise = player.play();
+
+      if (playPromise !== undefined) {
+        playPromise.catch((error: any) => {
+          console.warn(
+            '[WorldTV] Autoplay prevented after channel switch:',
+            error
+          );
+        });
+      }
+    } catch (error) {
+      console.error(
+        '[WorldTV] Failed to switch channel source:',
+        error
+      );
+
+      setLoadError('Unable to load this stream.');
+    }
+  };
+
+  /*
+   * ----------------------------------------------------------
    * Retry logic
    * ----------------------------------------------------------
    */
@@ -778,6 +898,10 @@ const VideoPlayer = React.forwardRef<
       url.includes('youtu.be/') ||
       url.includes('youtube.com/live/')
     ) {
+      // Switching to an embedded website/YouTube view — any existing
+      // video.js player (and its <video> element) is no longer needed.
+      destroyPlayer();
+
       setIsWebsite(true);
 
       let videoId = '';
@@ -829,16 +953,42 @@ const VideoPlayer = React.forwardRef<
      */
 
     const timer = setTimeout(() => {
-      createPlayer();
+      if (playerRef.current) {
+        // A player already exists (this is a channel switch, not the
+        // first load) — reuse it so any active native Picture-in-
+        // Picture session stays alive. See updateSource() above.
+        updateSource();
+      } else {
+        createPlayer();
+      }
     }, 0);
 
     return () => {
       clearTimeout(timer);
-      destroyPlayer();
+      // NOTE: intentionally NOT calling destroyPlayer() here anymore.
+      // This cleanup used to run (and dispose the player) on every
+      // single channel switch, which tore down the <video> element
+      // and killed "Watch in background" every time. The player is
+      // now only disposed when this component actually unmounts (see
+      // the effect below) or when switching to the website/iframe
+      // view (see destroyPlayer() call above).
     };
 
   
   }, [streamUrl, channelName]);
+
+  /*
+   * ----------------------------------------------------------
+   * True unmount only: dispose the player when this component is
+   * actually removed from the tree, not on every channel switch.
+   * ----------------------------------------------------------
+   */
+  useEffect(() => {
+    return () => {
+      destroyPlayer();
+    };
+    // eslint-disable-next-line
+  }, []);
 
   /*
    * ----------------------------------------------------------
