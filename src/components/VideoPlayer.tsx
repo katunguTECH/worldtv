@@ -159,12 +159,15 @@ const VideoPlayer = React.forwardRef<
 
       plugins: {
         chromecast: {
-          addButtonToControlBar: true,
+          // We add the button explicitly in controlBar.children below
+          // (using its registered name 'ChromecastButton'), so turn
+          // off the plugin's own auto-insert to avoid a duplicate.
+          addButtonToControlBar: false,
           receiver: 'CC1AD845',
           preloadWebComponents: true,
         },
         airPlay: {
-          addButtonToControlBar: true,
+          addButtonToControlBar: false,
         },
       },
 
@@ -193,6 +196,28 @@ const VideoPlayer = React.forwardRef<
           'seekToLive',
           'remainingTimeDisplay',
           'playbackRateMenuButton',
+
+          /*
+           * Casting buttons.
+           *
+           * These are the EXACT component names registered by
+           * @silvermine/videojs-chromecast and
+           * @silvermine/videojs-airplay. They were confirmed via
+           * videojs.getComponent() at runtime:
+           *   - "ChromecastButton"  → REGISTERED ✅
+           *   - "AirPlayButton"     → REGISTERED ✅
+           *
+           * Note the capital P in AirPlayButton — 'AirplayButton'
+           * does not exist and video.js silently skips unknown
+           * component names.
+           *
+           * Each button hides itself if its environment isn't
+           * available (Cast button stays hidden in Safari, AirPlay
+           * button stays hidden in Chrome).
+           */
+          'ChromecastButton',
+          'AirPlayButton',
+
           'pictureInPictureToggle',
           'fullscreenToggle',
         ],
@@ -217,58 +242,6 @@ const VideoPlayer = React.forwardRef<
           videoEl.addEventListener('enterpictureinpicture', () => onPipChangeRef.current?.(true));
           videoEl.addEventListener('leavepictureinpicture', () => onPipChangeRef.current?.(false));
         }
-
-        /* ⬅️ DIAGNOSTIC BLOCK — remove after we figure out the cast button */
-        try {
-          const p = player as any; // bypass strict video.js typings
-
-          console.log('===== CAST DIAGNOSTIC =====');
-          console.log('window.chrome:', typeof (window as any).chrome);
-          console.log('window.chrome.cast:', (window as any).chrome?.cast ? 'present' : 'missing');
-          console.log('chrome.cast.isAvailable:', (window as any).chrome?.cast?.isAvailable);
-          console.log('window.cast:', typeof (window as any).cast);
-          console.log('navigator.userAgent:', navigator.userAgent);
-
-          console.log('Player techName_:', p.techName_);
-          console.log('Player controlBar exists:', !!p.controlBar);
-          console.log(
-            'ControlBar children:',
-            p.controlBar?.children_?.map((c: any) => (c.name && c.name()) || c.constructor?.name)
-          );
-
-          const componentNames = ['ChromecastButton', 'CastButton', 'AirPlayButton', 'AirplayButton'];
-          componentNames.forEach((name) => {
-            try {
-              const Ctor = (videojs as any).getComponent(name);
-              console.log(`Component "${name}":`, Ctor ? 'REGISTERED' : 'not found');
-            } catch (e) {
-              console.log(`Component "${name}": error checking`, e);
-            }
-          });
-
-          try {
-            const Ctor = (videojs as any).getComponent('ChromecastButton');
-            if (Ctor) {
-              const idx = Math.max(0, (p.controlBar.children_?.length || 0) - 2);
-              p.controlBar.addChild('ChromecastButton', {}, idx);
-              console.log('[WorldTV] Manually added ChromecastButton at index', idx);
-            } else {
-              console.warn('[WorldTV] ChromecastButton component NOT registered by plugin');
-            }
-          } catch (e) {
-            console.warn('[WorldTV] Failed to manually add ChromecastButton:', e);
-          }
-
-          console.log(
-            'ControlBar children AFTER:',
-            p.controlBar?.children_?.map((c: any) => (c.name && c.name()) || c.constructor?.name)
-          );
-          console.log('===== END CAST DIAGNOSTIC =====');
-        } catch (diagErr) {
-          console.warn('[WorldTV] Cast diagnostic failed:', diagErr);
-        }
-        /* ⬅️ END DIAGNOSTIC BLOCK */
-
       } catch (error) {
         console.warn('[WorldTV] Post-ready setup failed:', error);
       }
