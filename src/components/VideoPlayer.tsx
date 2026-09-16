@@ -2,11 +2,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import videojs from 'video.js';
 import 'video.js/dist/video-js.css';
 
-// ⬅️ import the Silvermine casting plugins
+// Silvermine casting plugins
 import chromecast from '@silvermine/videojs-chromecast';
 import airplay from '@silvermine/videojs-airplay';
 
-// ⬅️ register the plugins once, at module load time.
+// Register the plugins once, at module load time.
 // This must run before any video.js player is created.
 chromecast(videojs);
 airplay(videojs);
@@ -276,32 +276,32 @@ const VideoPlayer = React.forwardRef<
       techOrder: ['chromecast', 'html5'],
 
       /*
-       * Tells the plugin to load Google's Cast Web Components
-       * early (before user interaction) so the cast button
-       * appears reliably in Chrome/Edge/Android.
+       * Casting plugins.
+       *
+       * IMPORTANT: `preloadWebComponents` MUST be inside the
+       * chromecast plugin block (not at the top level) — the
+       * plugin reads it from here to decide whether to preload
+       * Google's Cast Web Components. When those components
+       * haven't loaded, the button renders as an empty,
+       * zero-width element, which is why the icon appears
+       * missing.
+       *
+       * `addButtonToControlBar: true` lets the plugin insert
+       * its button into the control bar automatically. We
+       * deliberately do NOT list 'CastButton' / 'AirPlayButton'
+       * in controlBar.children — the component names the
+       * plugins register are NOT the same as those strings,
+       * and unknown names are silently skipped by video.js,
+       * which makes the button disappear.
        */
-      preloadWebComponents: true,
-
       plugins: {
         chromecast: {
-          /*
-           * ⬅️ CHANGED: false (was true).
-           *
-           * We now list 'CastButton' explicitly in
-           * controlBar.children below. Leaving addButtonToControlBar
-           * as true would create a SECOND cast button (the plugin
-           * would add one, and the control bar would add another).
-           */
-          addButtonToControlBar: false,
-
-          // Google's Default Media Receiver. Understands HLS, MP4
-          // and most live streams out of the box.
-          receiver: 'CC1AD845',
+          addButtonToControlBar: true,
+          receiver: 'CC1AD845', // Google Default Media Receiver
+          preloadWebComponents: true,
         },
         airPlay: {
-          // ⬅️ CHANGED: false (was true). Same reasoning as above —
-          // 'AirPlayButton' is now listed in controlBar.children.
-          addButtonToControlBar: false,
+          addButtonToControlBar: true,
         },
       },
 
@@ -366,26 +366,9 @@ const VideoPlayer = React.forwardRef<
           'seekToLive',
           'remainingTimeDisplay',
           'playbackRateMenuButton',
-
-          /*
-           * ⬅️ CHANGED: Added the casting buttons here.
-           *
-           * When `controlBar.children` is defined, video.js builds
-           * the control bar using ONLY that array. It ignores
-           * anything plugins try to auto-insert via
-           * `addButtonToControlBar`. So the cast buttons have to be
-           * named explicitly.
-           *
-           * 'CastButton' and 'AirPlayButton' are the component
-           * names registered by @silvermine/videojs-chromecast and
-           * @silvermine/videojs-airplay respectively. Each button
-           * hides itself automatically if its API isn't available
-           * (e.g. AirPlay button stays hidden in Chrome, Cast
-           * button stays hidden in Safari).
-           */
-          'CastButton',
-          'AirPlayButton',
-
+          // NOTE: Cast button and AirPlay button are NOT listed
+          // here on purpose — see the comment above the plugins
+          // block. They are auto-inserted by the plugins.
           'pictureInPictureToggle',
           'fullscreenToggle',
         ],
@@ -394,18 +377,18 @@ const VideoPlayer = React.forwardRef<
 
     /*
      * --------------------------------------------------------
-     * Native Picture-in-Picture (mobile "floating over other
-     * apps" behavior, same as YouTube's mini player).
+     * Native Picture-in-Picture
      * --------------------------------------------------------
-     */
-
-    /*
-     * IMPORTANT: this runs in its own player.ready() callback,
-     * fully isolated (try/catch) from the source-loading logic
-     * below. player.tech() is unsafe to call this early (before
-     * a source is loaded, video.js may not have an active tech
-     * yet, and calling it can throw) — we use the <video> DOM
-     * node we already hold a ref to instead, which always exists.
+     *
+     * The `pictureInPictureToggle` control above already wires
+     * this up for the video.js UI. We additionally:
+     *
+     *  - Set Media Session metadata so the floating PiP window
+     *    (and lock screen / notification tray) shows the
+     *    channel name instead of a blank title.
+     *  - Track PiP enter/leave so the parent App can decide
+     *    whether it's safe to unmount the player when the user
+     *    dismisses the modal (see onPipChange prop).
      */
     player.ready(() => {
       try {
@@ -544,7 +527,6 @@ const VideoPlayer = React.forwardRef<
      * VHS-specific error handling
      * --------------------------------------------------------
      */
-
     player.on('xhr-error', (event: any) => {
       console.warn(
         '[WorldTV] VHS/XHR error:',
