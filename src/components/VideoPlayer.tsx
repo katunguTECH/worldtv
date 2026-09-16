@@ -5,6 +5,8 @@ import 'video.js/dist/video-js.css';
 // Silvermine casting plugins
 import chromecast from '@silvermine/videojs-chromecast';
 import airplay from '@silvermine/videojs-airplay';
+import '@silvermine/videojs-chromecast/dist/silvermine-videojs-chromecast.css';
+import '@silvermine/videojs-airplay/dist/silvermine-videojs-airplay.css';
 
 // Register the plugins once, at module load time.
 chromecast(videojs);
