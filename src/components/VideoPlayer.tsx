@@ -220,6 +220,8 @@ const VideoPlayer = React.forwardRef<
 
         /* ⬅️ DIAGNOSTIC BLOCK — remove after we figure out the cast button */
         try {
+          const p = player as any; // bypass strict video.js typings
+
           console.log('===== CAST DIAGNOSTIC =====');
           console.log('window.chrome:', typeof (window as any).chrome);
           console.log('window.chrome.cast:', (window as any).chrome?.cast ? 'present' : 'missing');
@@ -227,15 +229,15 @@ const VideoPlayer = React.forwardRef<
           console.log('window.cast:', typeof (window as any).cast);
           console.log('navigator.userAgent:', navigator.userAgent);
 
-          console.log('Player techName_:', player.techName_);
-          console.log('Player controlBar exists:', !!player.controlBar);
-          console.log('ControlBar children:',
-            player.controlBar?.children_?.map((c: any) => (c.name && c.name()) || c.constructor?.name)
+          console.log('Player techName_:', p.techName_);
+          console.log('Player controlBar exists:', !!p.controlBar);
+          console.log(
+            'ControlBar children:',
+            p.controlBar?.children_?.map((c: any) => (c.name && c.name()) || c.constructor?.name)
           );
 
-          // Check what cast-related components are registered
-          const components = ['ChromecastButton', 'CastButton', 'AirPlayButton', 'AirplayButton'];
-          components.forEach(name => {
+          const componentNames = ['ChromecastButton', 'CastButton', 'AirPlayButton', 'AirplayButton'];
+          componentNames.forEach((name) => {
             try {
               const Ctor = (videojs as any).getComponent(name);
               console.log(`Component "${name}":`, Ctor ? 'REGISTERED' : 'not found');
@@ -244,12 +246,11 @@ const VideoPlayer = React.forwardRef<
             }
           });
 
-          // Try to manually add the Chromecast button
           try {
             const Ctor = (videojs as any).getComponent('ChromecastButton');
             if (Ctor) {
-              const idx = Math.max(0, (player.controlBar.children_?.length || 0) - 2);
-              player.controlBar.addChild('ChromecastButton', {}, idx);
+              const idx = Math.max(0, (p.controlBar.children_?.length || 0) - 2);
+              p.controlBar.addChild('ChromecastButton', {}, idx);
               console.log('[WorldTV] Manually added ChromecastButton at index', idx);
             } else {
               console.warn('[WorldTV] ChromecastButton component NOT registered by plugin');
@@ -258,8 +259,9 @@ const VideoPlayer = React.forwardRef<
             console.warn('[WorldTV] Failed to manually add ChromecastButton:', e);
           }
 
-          console.log('ControlBar children AFTER:',
-            player.controlBar?.children_?.map((c: any) => (c.name && c.name()) || c.constructor?.name)
+          console.log(
+            'ControlBar children AFTER:',
+            p.controlBar?.children_?.map((c: any) => (c.name && c.name()) || c.constructor?.name)
           );
           console.log('===== END CAST DIAGNOSTIC =====');
         } catch (diagErr) {
