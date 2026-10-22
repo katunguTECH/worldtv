@@ -1,0 +1,48 @@
+﻿
+
+StatusCode        : 200
+StatusDescription : OK
+Content           : <!DOCTYPE html>
+                    <html lang="en">
+                    <head>
+                        <meta charset="UTF-8" />
+                        <meta name="robots" content="index,follow,noarchive,noimageindex" />
+                            <meta name="viewport" content="width=device-width,...
+RawContent        : HTTP/1.1 200 OK
+                    Transfer-Encoding: chunked
+                    Connection: keep-alive
+                    Report-To: {"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=rHSXVAX80LQSOiEJOrJa6%2...
+Forms             : 
+Headers           : {[Transfer-Encoding, chunked], [Connection, keep-alive], [Report-To, {"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=rHSXV
+                    AX80LQSOiEJOrJa6%2FXs%2BjTz2zXFEapaB%2BfmfrJhBE7Snl5tYjWwPUiZ0qQ08vqNRH1LrVLNeRyjeVeNKCDD6k33KBgnUTi%2BsIIqJltY05g7qoPknyuBti9BlhIXYw%3D%3D"}]}], [vary, 
+                    Accept-Encoding]...}
+Images            : {}
+InputFields       : {@{outerHTML=<input type="checkbox" id="nav-toggle" class="nav-toggle hidden" />; tagName=INPUT; type=checkbox; id=nav-toggle; class=nav-toggle hidden}, 
+                    @{outerHTML=<input id="search-input" class="search-input" placeholder="Filter Countries..." autocomplete="off" enterkeyhint="done" />; tagName=INPUT; id=search-input; 
+                    class=search-input; placeholder=Filter Countries...; autocomplete=off; enterkeyhint=done}, @{outerHTML=<input type="text" id="sportsSearchInput" placeholder="Search 
+                    event, team, league, or channel..." autocomplete="off" />; tagName=INPUT; type=text; id=sportsSearchInput; placeholder=Search event, team, league, or channel...; 
+                    autocomplete=off}, @{outerHTML=<input
+                                                                            id="media-volume-slider"
+                                                                            class="media-volume-slider"
+                                                                            type="range"
+                                                                            min="0"
+                                                                            max="100"
+                                                                            value="100"
+                                                                            aria-label="Volume"
+                                                                        />; tagName=INPUT; id=media-volume-slider; class=media-volume-slider; type=range; min=0; max=100; value=100; 
+                    aria-label=Volume}}
+Links             : {@{outerHTML=<a href="/cdn-cgi/l/email-protection#2e4d41405a4f4d5a6e5a58494f5c4a4b400059415c424a"><span class="__cf_email__" 
+                    data-cfemail="6d0e0203190c0e192d191b0a0c1f090803431a021f0109">[email&#160;protected]</span></a>; tagName=A; 
+                    href=/cdn-cgi/l/email-protection#2e4d41405a4f4d5a6e5a58494f5c4a4b400059415c424a}, @{outerHTML=<a href="https://github.com/iptv-org/iptv" target="_blank">IPTV-org GitHub 
+                    repo</a>; tagName=A; href=https://github.com/iptv-org/iptv; target=_blank}, @{outerHTML=<a 
+                    href="/cdn-cgi/l/email-protection#43202c2d3722203703373524223127262d6d342c312f27"><span class="__cf_email__" 
+                    data-cfemail="10737f7e6471736450646677716274757e3e677f627c74">[email&#160;protected]</span></a>; tagName=A; 
+                    href=/cdn-cgi/l/email-protection#43202c2d3722203703373524223127262d6d342c312f27}, @{outerHTML=<a 
+                    href="/cdn-cgi/l/email-protection#89eae6e7fde8eafdc9fdffeee8fbedece7a7fee6fbe5ed"><span class="__cf_email__" 
+                    data-cfemail="a6c5c9c8d2c7c5d2e6d2d0c1c7d4c2c3c888d1c9d4cac2">[email&#160;protected]</span></a>; tagName=A; 
+                    href=/cdn-cgi/l/email-protection#89eae6e7fde8eafdc9fdffeee8fbedece7a7fee6fbe5ed}...}
+ParsedHtml        : 
+RawContentLength  : 193699
+
+
+

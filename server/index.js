@@ -7,6 +7,7 @@ const { filterHealthyChannels } = require('./streamHealth');
 
 const app = express();
 
+require('./streamProxy')(app);
 const STATIC_DIR = process.env.STATIC_DIR || 'build';
 
 // ============================================================
@@ -718,88 +719,47 @@ function getYoutubeChannels() {
 // M3U PARSER
 // ============================================================
 
-function parseM3U(
-  content,
-  countryName
-) {
-  const lines =
-    String(content).split('\n');
-
+function parseM3U(content, countryName) {
+  const lines = String(content).split('\n');
   const channels = [];
-
   let current = null;
+  let pendingReferrer = '';
+  let pendingUserAgent = '';
 
   for (const raw of lines) {
-    const line =
-      String(raw).trim();
+    const line = String(raw).trim();
 
-    if (
-      line.startsWith('#EXTINF:')
-    ) {
-      const nameMatch =
-        line.match(/,(.+)$/);
-
-      const logoMatch =
-        line.match(
-          /tvg-logo="([^"]*)"/
-        );
-
-      const groupMatch =
-        line.match(
-          /group-title="([^"]*)"/
-        );
-
-      const idMatch =
-        line.match(
-          /tvg-id="([^"]*)"/
-        );
+    if (line.startsWith('#EXTINF:')) {
+      const nameMatch = line.match(/,(.+)$/);
+      const logoMatch = line.match(/tvg-logo="([^"]*)"/);
+      const groupMatch = line.match(/group-title="([^"]*)"/);
+      const idMatch = line.match(/tvg-id="([^"]*)"/);
 
       current = {
-        id:
-          idMatch &&
-          idMatch[1]
-            ? idMatch[1]
-            : `iptv-${countryName}-${channels.length}`,
-
-        name:
-          nameMatch &&
-          nameMatch[1]
-            ? nameMatch[1].trim()
-            : 'Unknown Channel',
-
-        logo:
-          logoMatch &&
-          logoMatch[1]
-            ? logoMatch[1]
-            : '',
-
-        country:
-          countryName,
-
-        category:
-          groupMatch &&
-          groupMatch[1]
-            ? groupMatch[1]
-            : 'General',
-
-        language:
-          'Unknown',
-
-        streamUrl:
-          '',
+        id: idMatch && idMatch[1] ? idMatch[1] : `iptv-${countryName}-${channels.length}`,
+        name: nameMatch && nameMatch[1] ? nameMatch[1].trim() : 'Unknown Channel',
+        logo: logoMatch && logoMatch[1] ? logoMatch[1] : '',
+        country: countryName,
+        category: groupMatch && groupMatch[1] ? groupMatch[1] : 'General',
+        language: 'Unknown',
+        streamUrl: '',
+        referrer: '',
+        userAgent: '',
       };
-    } else if (
-      line.startsWith('http') &&
-      current
-    ) {
-      current.streamUrl =
-        line;
-
-      channels.push(
-        current
-      );
-
+      pendingReferrer = '';
+      pendingUserAgent = '';
+    } else if (line.startsWith('#EXTVLCOPT:http-referrer=')) {
+      pendingReferrer = line.slice('#EXTVLCOPT:http-referrer='.length);
+    } else if (line.startsWith('#EXTVLCOPT:http-user-agent=')) {
+      pendingUserAgent = line.slice('#EXTVLCOPT:http-user-agent='.length);
+    } else if (line.startsWith('http') && current) {
+      current.streamUrl = line;
+      current.referrer = pendingReferrer;
+      current.userAgent = pendingUserAgent;
+      channels.push(current);
       current = null;
+      pendingReferrer = '';
+      pendingUserAgent = '';
     }
   }
 
