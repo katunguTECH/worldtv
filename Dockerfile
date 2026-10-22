@@ -1,11 +1,11 @@
 FROM node:18-bullseye
 
-RUN apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    ffmpeg \
-    && rm -rf /var/lib/apt/lists/*
+# Copy statically linked ffmpeg/ffprobe — no apt-get, no package-manager network
+COPY --from=mwader/static-ffmpeg:9.0.2-1 /ffmpeg /usr/local/bin/
+COPY --from=mwader/static-ffmpeg:9.0.2-1 /ffprobe /usr/local/bin/
 
-RUN ffprobe -version
+# Verify both binaries run (fails build if incompatible)
+RUN ffmpeg -version && ffprobe -version
 
 WORKDIR /app
 
