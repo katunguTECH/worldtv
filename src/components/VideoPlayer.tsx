@@ -108,9 +108,10 @@ const VideoPlayer = React.forwardRef<
     }
   };
 
+  const API_BASE = process.env.REACT_APP_API_BASE ?? '';
   const getProxyUrl = (url: string) => {
-    if (url.startsWith('/')) return url;
-    return `/api/proxy?url=${encodeURIComponent(url)}`;
+    if (url.startsWith('/')) return `${API_BASE}${url}`;
+    return `${API_BASE}/api/proxy?url=${encodeURIComponent(url)}`;
   };
 
   const getStreamType = (url: string) => {
@@ -228,7 +229,7 @@ const VideoPlayer = React.forwardRef<
          *
          * We do this here (instead of listing them in controlBar.children)
          * because the plugin reads its `preloadWebComponents` flag from
-         * the BUTTON's own options â€” not from the plugin config. Passing
+         * the BUTTON's own options Ã¢â‚¬â€ not from the plugin config. Passing
          * that flag when we create the button is what makes the icon
          * actually render (without it, the button is created but stays
          * empty/invisible).
@@ -446,7 +447,7 @@ const VideoPlayer = React.forwardRef<
     if (iframeFailed) {
       return (
         <div className="bg-gray-900 rounded-lg p-8 text-center">
-          <div className="text-yellow-400 text-4xl mb-4">ðŸ”’</div>
+          <div className="text-yellow-400 text-4xl mb-4">Ã°Å¸â€â€™</div>
           <div className="text-white text-lg mb-2">This website blocks embedded viewing</div>
           <div className="text-gray-400 text-sm mb-4">
             {channelName} prevents its stream from being shown in an iframe.<br />
@@ -456,7 +457,7 @@ const VideoPlayer = React.forwardRef<
             onClick={() => window.open(streamUrl, '_blank', 'noopener,noreferrer')}
             className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition text-lg font-semibold"
           >
-            Open {channelName} in New Tab â†—
+            Open {channelName} in New Tab Ã¢â€ â€”
           </button>
         </div>
       );
@@ -487,7 +488,7 @@ const VideoPlayer = React.forwardRef<
               className="bg-gray-800/90 hover:bg-gray-700 text-white px-3 py-1.5 rounded text-sm transition flex items-center gap-1"
               title="Float this player in a window on top of everything else"
             >
-              Float window â§‰
+              Float window Ã¢Â§â€°
             </button>
           )}
 
@@ -495,7 +496,7 @@ const VideoPlayer = React.forwardRef<
             onClick={() => window.open(streamUrl, '_blank', 'noopener,noreferrer')}
             className="bg-gray-800/90 hover:bg-gray-700 text-white px-3 py-1.5 rounded text-sm transition flex items-center gap-1"
           >
-            Open in new tab â†—
+            Open in new tab Ã¢â€ â€”
           </button>
         </div>
       </div>
@@ -505,9 +506,9 @@ const VideoPlayer = React.forwardRef<
   if (loadError) {
     return (
       <div className="bg-gray-900 rounded-lg p-8 text-center">
-        <div className="text-red-400 text-4xl mb-4">âš ï¸</div>
+        <div className="text-red-400 text-4xl mb-4">Ã¢Å¡Â Ã¯Â¸Â</div>
         <div className="text-white text-lg mb-2">{loadError}</div>
-        {isRetrying && (<div className="text-yellow-400 text-sm mb-4">Attempting to reconnectâ€¦</div>)}
+        {isRetrying && (<div className="text-yellow-400 text-sm mb-4">Attempting to reconnectÃ¢â‚¬Â¦</div>)}
         <div className="text-gray-500 text-xs mb-5 break-all">{streamUrl}</div>
         <div className="flex justify-center gap-3 flex-wrap">
           <button
@@ -520,7 +521,7 @@ const VideoPlayer = React.forwardRef<
             onClick={() => window.open(streamUrl, '_blank', 'noopener,noreferrer')}
             className="bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-lg transition font-semibold"
           >
-            Open Stream â†—
+            Open Stream Ã¢â€ â€”
           </button>
         </div>
       </div>
@@ -537,7 +538,7 @@ const VideoPlayer = React.forwardRef<
       />
       {isRetrying && (
         <div className="absolute top-3 left-3 z-20 bg-black/75 text-white text-sm px-3 py-2 rounded">
-          Reconnectingâ€¦
+          ReconnectingÃ¢â‚¬Â¦
         </div>
       )}
     </div>
