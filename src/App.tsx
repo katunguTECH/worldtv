@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Channel } from './types/channel.types';
 import {
   initializeChannels,
@@ -1091,7 +1091,7 @@ function App() {
         (sidebar, grid, search, player) once the free-browsing window
         has elapsed for a visitor who hasn't confirmed an email yet.
       */}
-      {showEmailGate && !hasEmail && (
+      {false && !hasEmail && (  /* email gate disabled */
         <EmailGate
           onSubmit={() => {
             setHasEmail(true);
