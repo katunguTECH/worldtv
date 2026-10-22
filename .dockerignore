@@ -1,0 +1,16 @@
+node_modules
+build
+.git
+.gitignore
+*.md
+.DS_Store
+_backup
+*.bak-*
+*.pre-urlfix*
+*.before-*
+*.backup
+*.docx
+*.pdf
+*.zip
+.env
+.env.local
