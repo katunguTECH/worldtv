@@ -1,3 +1,11 @@
 ﻿node_modules/
 build/
 .DS_Store
+
+# Backup files from refactoring/patches
+*.bak-*
+*.before-*
+*.backup
+*.pre-urlfix*
+*.pre-urlfix2*
+*.after-*
