@@ -3,7 +3,9 @@ const path = require('path');
 const fs = require('fs');
 const { MongoClient } = require('mongodb');
 const { Agent, setGlobalDispatcher } = require('undici');
-const { filterHealthyChannels } = require('./streamHealth');
+// HEALTHCHECK DISABLED â€” was causing startup hangs and OOM on 256MB containers
+// const { filterHealthyChannels } = require('./streamHealth');
+const filterHealthyChannels = async (channels, opts) => ({ healthy: channels, removed: [] });
 
 const app = express();
 
@@ -1066,7 +1068,7 @@ async function loadChannels(
           );
           removed.slice(0, 25).forEach(({ channel, reason }) => {
             console.log(
-              `  ✗ ${channel.name} (${channel.country}) — ${reason}`
+              `  Ã¢Å“â€” ${channel.name} (${channel.country}) Ã¢â‚¬â€ ${reason}`
             );
           });
           if (removed.length > 25) {
@@ -1124,8 +1126,8 @@ async function loadChannels(
 // A full refresh (loadChannels) re-pulls every country's playlist
 // from iptv-org every 6h. That's too slow to catch a stream that
 // dies in between refreshes. This job instead re-checks the
-// channels already in the cache — no re-fetching from iptv-org,
-// just re-probing the URLs we're currently serving — and drops
+// channels already in the cache Ã¢â‚¬â€ no re-fetching from iptv-org,
+// just re-probing the URLs we're currently serving Ã¢â‚¬â€ and drops
 // anything that's stopped playing since it was cached.
 
 const pruneLocks = new Set();
@@ -1163,12 +1165,12 @@ async function pruneCache(label, getCache, setCache) {
       },
     });
 
-    // Never let a bad prune pass wipe the cache out — e.g. if
+    // Never let a bad prune pass wipe the cache out Ã¢â‚¬â€ e.g. if
     // ffprobe/network briefly broke and every check "failed",
     // keep the previous list rather than serving an empty grid.
     if (healthy.length === 0 && before > 0) {
       console.warn(
-        `[hourly prune:${label}] Every cached channel failed its check — ` +
+        `[hourly prune:${label}] Every cached channel failed its check Ã¢â‚¬â€ ` +
         'assuming something is wrong with the checker itself, not ' +
         'the channels. Keeping the existing cache untouched.'
       );
@@ -1188,7 +1190,7 @@ async function pruneCache(label, getCache, setCache) {
 
     if (removed.length > 0) {
       removed.slice(0, 25).forEach(({ channel, reason }) => {
-        console.log(`  ✗ ${channel.name} (${channel.country}) — ${reason}`);
+        console.log(`  Ã¢Å“â€” ${channel.name} (${channel.country}) Ã¢â‚¬â€ ${reason}`);
       });
       if (removed.length > 25) {
         console.log(`  ...and ${removed.length - 25} more`);
@@ -1257,20 +1259,20 @@ function startHourlyPrune() {
 // ============================================================
 // IPTV-ORG GLOBAL CHANNEL LIST (legal-filtered + health-checked)
 // ============================================================
-// Separate from the per-country m3u playlists above — this pulls
+// Separate from the per-country m3u playlists above Ã¢â‚¬â€ this pulls
 // iptv-org's global channels/streams/blocklist datasets, drops
 // anything NSFW/closed/DMCA-blocklisted, health-checks what's
 // left with ffprobe, and caches the result.
 //
 // This used to be fetched directly from the browser (see the old
 // fetchLegalIptvOrgChannels in iptvService.ts). It's moved here
-// so ffprobe can be used on it — that only works server-side.
+// so ffprobe can be used on it Ã¢â‚¬â€ that only works server-side.
 
 const IPTV_ORG_CHANNELS_URL = 'https://iptv-org.github.io/api/channels.json';
 const IPTV_ORG_STREAMS_URL = 'https://iptv-org.github.io/api/streams.json';
 const IPTV_ORG_BLOCKLIST_URL = 'https://iptv-org.github.io/api/blocklist.json';
 
-const IPTV_ORG_CACHE_DURATION = 24 * 60 * 60 * 1000; // 24h — blocklist changes daily
+const IPTV_ORG_CACHE_DURATION = 24 * 60 * 60 * 1000; // 24h Ã¢â‚¬â€ blocklist changes daily
 
 let iptvOrgCache = {
   data: [],
@@ -1368,7 +1370,7 @@ async function loadIptvOrgChannels(options = {}) {
           `iptv-org: removed ${removed.length}/${candidates.length} dead or audio-only channels`
         );
         removed.slice(0, 25).forEach(({ channel, reason }) => {
-          console.log(`  ✗ ${channel.name} (${channel.country}) — ${reason}`);
+          console.log(`  Ã¢Å“â€” ${channel.name} (${channel.country}) Ã¢â‚¬â€ ${reason}`);
         });
       }
 
@@ -1420,7 +1422,7 @@ app.get('/api/iptv-org-channels', async (req, res) => {
     }
 
     // Cold path. Don't block on a full health-check pass, and
-    // don't race the main loader — that's what caused the OOM.
+    // don't race the main loader Ã¢â‚¬â€ that's what caused the OOM.
     // Queue our pass to start after the main one finishes, then
     // return immediately so the frontend isn't stuck.
     (async () => {
@@ -2822,5 +2824,5 @@ app.listen(PORT, () => {
 
   // Re-check the currently cached streams every hour and drop
   // whatever's stopped playing since it was cached.
-  startHourlyPrune();
+  // startHourlyPrune(); // DISABLED
 });
